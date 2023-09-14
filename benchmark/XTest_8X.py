@@ -15,7 +15,7 @@ torch.backends.cudnn.benchmark = True
 
 '''==========import from our code=========='''
 sys.path.append('.')
-import config as cfg
+import configs.EMA_VFI_config as cfg
 from Trainer import Model
 from benchmark.utils.padder import InputPadder
 from benchmark.utils.pytorch_msssim import ssim_matlab

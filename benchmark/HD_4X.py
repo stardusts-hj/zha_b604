@@ -13,7 +13,7 @@ torch.set_grad_enabled(False)
 
 '''==========import from our code=========='''
 sys.path.append('.')
-import config as cfg
+import configs.EMA_VFI_config as cfg
 from Trainer import Model
 from benchmark.utils.padder import InputPadder
 from benchmark.utils.yuv_frame_io import YUV_Read

@@ -12,7 +12,7 @@ from Trainer import Model
 from benchmark.utils.padder import InputPadder
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--model', default='baseline', type=str)
+parser.add_argument('--model', default='abseline', type=str)
 args = parser.parse_args()
 
 

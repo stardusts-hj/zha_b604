@@ -1,0 +1,4 @@
+timm
+opencv-python
+tensorboard
+logging

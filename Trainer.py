@@ -40,7 +40,7 @@ class Model:
         if rank <= 0 :
             if name is None:
                 name = self.name
-            self.net.load_state_dict(convert(torch.load(f'ckpt/{name}.pkl')))
+            self.net.load_state_dict(convert(torch.load(name)))
     
     def save_model(self, name, rank=0):
         if rank == 0:
