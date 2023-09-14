@@ -4,16 +4,15 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.optim import AdamW
 from model.loss import *
 from model.warplayer import warp
+from model.Full_Model import FullModel
+import importlib
 
-from config import *
 
-    
 class Model:
-    def __init__(self, local_rank):
-        backbonetype, multiscaletype = MODEL_CONFIG['MODEL_TYPE']
-        backbonecfg, multiscalecfg = MODEL_CONFIG['MODEL_ARCH']
-        self.net = multiscaletype(backbonetype(**backbonecfg), **multiscalecfg)
-        self.name = MODEL_CONFIG['LOGNAME']
+    def __init__(self, local_rank, config):
+        cf = importlib.import_module('configs.' + config)
+        self.net = FullModel(**cf.MODEL_CONFIG)
+        self.name = cf.MODEL_CONFIG['LOGNAME']
         self.device()
 
         # train
@@ -43,9 +42,9 @@ class Model:
                 name = self.name
             self.net.load_state_dict(convert(torch.load(f'ckpt/{name}.pkl')))
     
-    def save_model(self, rank=0):
+    def save_model(self, name, rank=0):
         if rank == 0:
-            torch.save(self.net.state_dict(),f'ckpt/{self.name}.pkl')
+            torch.save(self.net.state_dict(),name)
 
     @torch.no_grad()
     def hr_inference(self, img0, img1, TTA = False, down_scale = 1.0, timestep = 0.5, fast_TTA = False):
@@ -140,7 +139,7 @@ class Model:
             flip_pred = infer(imgs.flip(2).flip(3))
             return [(preds[i][0] + flip_pred[i][0].flip(1).flip(2))/2 for i in range(len(time_list))]
     
-    def update(self, imgs, gt, learning_rate=0, training=True):
+    def update(self, imgs, gt, learning_rate=0, training=True, emb_t = None):
         for param_group in self.optimG.param_groups:
             param_group['lr'] = learning_rate
         if training:
@@ -149,17 +148,20 @@ class Model:
             self.eval()
 
         if training:
-            flow, mask, merged, pred = self.net(imgs)
+            pred, extra_info = self.net(imgs, timestamp=emb_t)
+            # loss = F.mse_loss(pred, gt)
             loss_l1 = (self.lap(pred, gt)).mean()
 
-            for merge in merged:
-                loss_l1 += (self.lap(merge, gt)).mean() * 0.5
+            # for merge in merged:
+            #     loss_l1 += (self.lap(merge, gt)).mean() * 0.5
 
             self.optimG.zero_grad()
             loss_l1.backward()
+            # loss.backward()
             self.optimG.step()
             return pred, loss_l1
+            # return pred, loss
         else: 
             with torch.no_grad():
-                flow, mask, merged, pred = self.net(imgs)
+                pred, extra_info = self.net(imgs, timestamp=emb_t)
                 return pred, 0

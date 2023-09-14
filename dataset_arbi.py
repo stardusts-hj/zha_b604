@@ -4,7 +4,6 @@ import torch
 import numpy as np
 import random
 from torch.utils.data import Dataset
-from config import *
 from torch.utils.data import DataLoader
 from random import shuffle
 cv2.setNumThreads(1)

@@ -150,7 +150,7 @@ class InterFrameAttention(nn.Module):
         cor_embed_ = self.cor_embed(cor)
         cor_embed = cor_embed_.reshape(B, N, self.num_heads, self.motion_dim // self.num_heads).permute(0, 2, 1, 3)
         k, v = kv[0], kv[1]    
-        attn = (q @ k.transpose(-2, -1)) * self.scale
+        attn = (q @ k.transpose(-2, -1).contiguous()) * self.scale
 
         if mask is not None:
             nW = mask.shape[0] # mask: nW, N, N
@@ -163,8 +163,8 @@ class InterFrameAttention(nn.Module):
             attn = attn.softmax(dim=-1)
 
         attn = self.attn_drop(attn)
-        x = (attn @ v).transpose(1, 2).reshape(B, N, C)
-        c_reverse = (attn @ cor_embed).transpose(1, 2).reshape(B, N, -1)
+        x = (attn @ v).transpose(1, 2).contiguous().reshape(B, N, C)
+        c_reverse = (attn @ cor_embed).transpose(1, 2).contiguous().reshape(B, N, -1)
         motion = self.motion_proj(c_reverse-cor_embed_)
         x = self.proj(x)
         x = self.proj_drop(x)
@@ -336,7 +336,7 @@ class OverlapPatchEmbed(nn.Module):
     def forward(self, x):
         x = self.proj(x)
         _, _, H, W = x.shape
-        x = x.flatten(2).transpose(1, 2)
+        x = x.flatten(2).transpose(1, 2).contiguous()
         x = self.norm(x)
 
         return x, H, W
@@ -381,7 +381,7 @@ class CrossScalePatchEmbed(nn.Module):
                 k += 1
         x = self.proj(torch.cat(ys,1))
         _, _, H, W = x.shape
-        x = x.flatten(2).transpose(1, 2)
+        x = x.flatten(2).transpose(1, 2).contiguous()
         x = self.norm(x)
 
         return x, H, W
@@ -503,9 +503,9 @@ class DWConv(nn.Module):
 
     def forward(self, x, H, W):
         B, N, C = x.shape
-        x = x.transpose(1, 2).reshape(B, C, H, W)
+        x = x.transpose(1, 2).contiguous().reshape(B, C, H, W)
         x = self.dwconv(x)
-        x = x.reshape(B, C, -1).transpose(1, 2)
+        x = x.reshape(B, C, -1).transpose(1, 2).contiguous()
 
         return x
 

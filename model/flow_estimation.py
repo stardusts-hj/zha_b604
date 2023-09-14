@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .warplayer import warp
-from .refine import *
+from .Refine import *
 
 def conv(in_planes, out_planes, kernel_size=3, stride=1, padding=1, dilation=1):
     return nn.Sequential(
@@ -52,7 +52,7 @@ class MultiScaleFlow(nn.Module):
                             kargs['hidden_dims'][-1-i],
                             6 if i==0 else 17) 
                             for i in range(self.flow_num_stage)])
-        self.unet = Unet(kargs['c'] * 2)
+        self.unet = EMA_Unet(kargs['c'] * 2)
 
     def warp_features(self, xs, flow):
         y0 = []
