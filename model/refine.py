@@ -82,7 +82,7 @@ class NAF_Unet(nn.Module):
     def __init__(self, in_channel=3, width=16, middle_blk_num=1, enc_blk_nums=[], dec_blk_nums=[]):
         super().__init__()
         self.intro = conv(in_channel,width,3,1,1)
-        self.ending = conv(width,3,3,1,1)
+        self.ending = nn.Conv2d(width,3,3,1,1)
         self.encoders = nn.ModuleList()
         self.decoders = nn.ModuleList()
         self.middle_blks = nn.ModuleList()
@@ -139,6 +139,8 @@ class NAF_Unet(nn.Module):
             x = x + enc_skip
             x = decoder(x)
 
+        ## Note: must use sigmoid as act
         x = self.ending(x)
+        x = torch.sigmoid(x)
 
         return x

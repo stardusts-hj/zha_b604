@@ -29,9 +29,11 @@ class FullModel(nn.Module):
 
         init_pred = warped_img0 * (1 - timestamp) + warped_img1 * (timestamp)
 
-        res = self.refine(torch.cat([flow, feature, img0, img1, warped_img0, warped_img1, init_pred], dim=1))
-
-        interp_img = res + init_pred
+        res_out = self.refine(torch.cat([flow, feature, img0, img1, warped_img0, warped_img1, init_pred], dim=1))
+        
+        ### follow the implementation of EMA-VFI and RIFE
+        res = res_out[:, :3] * 2 - 1
+        interp_img = torch.clamp(res + init_pred, 0, 1)
 
         extra_info['warped_img0'] = warped_img0
         extra_info['warped_img1'] = warped_img1
