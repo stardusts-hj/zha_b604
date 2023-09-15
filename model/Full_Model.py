@@ -6,7 +6,7 @@ import sys
 from model.warplayer import warp
 import model.BackBone as BackBone
 
-import model.Refine as Refine
+import model.refine as Refine
 
 class FullModel(nn.Module):
     def __init__(self, **kwargs):
@@ -33,7 +33,8 @@ class FullModel(nn.Module):
         
         ### follow the implementation of EMA-VFI and RIFE
         res = res_out[:, :3] * 2 - 1
-        interp_img = torch.clamp(res + init_pred, 0, 1)
+        # interp_img = torch.clamp(res + init_pred, 0, 1)
+        interp_img = res + init_pred
 
         extra_info['warped_img0'] = warped_img0
         extra_info['warped_img1'] = warped_img1
