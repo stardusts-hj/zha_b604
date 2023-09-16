@@ -92,3 +92,29 @@ class Ternary(nn.Module):
         img0 = self.transform(self.rgb2gray(img0))
         img1 = self.transform(self.rgb2gray(img1))
         return self.hamming(img0, img1) * self.valid_mask(img0, 1)
+
+## charbonnierloss  
+class CharbonnierLoss(nn.Module):
+    """Charbonnier Loss (L1)"""
+    def __init__(self, eps=1e-3):
+        super(CharbonnierLoss, self).__init__()
+        self.eps = eps
+
+    def forward(self, x, y):
+        diff = x - y
+        loss = torch.mean(torch.sqrt((diff * diff) + (self.eps*self.eps)))
+        return loss
+
+## ssim loss
+class SSIMloss(nn.Module):
+    """ssim loss"""
+    def __init__(self) -> None:
+        super().__init__()
+
+if __name__ == '__main__':
+    device = 'cpu'
+    img0 = torch.zeros(3, 3, 256, 256).float().to(device)
+    img1 = torch.tensor(np.random.normal(
+        0, 1, (3, 3, 256, 256))).float().to(device)
+    ternary_loss = Ternary(device)
+    print(ternary_loss(img0, img1).shape)

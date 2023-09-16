@@ -17,6 +17,8 @@ class Model:
 
         # train
         self.optimG = AdamW(self.net.parameters(), lr=2e-4, weight_decay=1e-4)
+        # num_parameters = sum(map(lambda x: x.numel(), self.net.parameters()))
+        # print(num_parameters/1e6)
         self.lap = LapLoss()
         if local_rank != -1:
             self.net = DDP(self.net, device_ids=[local_rank], output_device=local_rank)

@@ -6,7 +6,7 @@ import sys
 from model.warplayer import warp
 import model.BackBone as BackBone
 
-import model.Refine as Refine
+import model.refine as Refine
 
 class FullModel(nn.Module):
     def __init__(self, **kwargs):
@@ -28,7 +28,7 @@ class FullModel(nn.Module):
         warped_img1 = warp(img1, flow[:, 2:4] * (1 - timestamp))
 
         init_pred = warped_img0 * (1 - timestamp) + warped_img1 * (timestamp)
-
+        
         res_out = self.refine(torch.cat([flow, feature, img0, img1, warped_img0, warped_img1, init_pred], dim=1))
         
         ### follow the implementation of EMA-VFI and RIFE

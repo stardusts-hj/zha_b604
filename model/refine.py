@@ -122,7 +122,7 @@ class NAF_Unet(nn.Module):
             )
         
     def forward(self, inp):
-
+        
         x = self.intro(inp)
 
         encs = []
@@ -133,13 +133,14 @@ class NAF_Unet(nn.Module):
             x = down(x)
 
         x = self.middle_blks(x)
-
+        #import pdb;pdb.set_trace()
         for decoder, up, enc_skip in zip(self.decoders, self.ups, encs[::-1]):
             x = up(x)
             x = x + enc_skip
             x = decoder(x)
 
         ## Note: must use sigmoid as act
+   
         x = self.ending(x)
         x = torch.sigmoid(x)
 
