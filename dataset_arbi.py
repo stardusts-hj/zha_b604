@@ -83,6 +83,7 @@ class VimeoDatasetArbi(Dataset):
                 gt = gt[:, :, ::-1]
             if random.uniform(0, 1) < 0.5:
                 img1, img0 = img0, img1
+                timestep = 1 - timestep
             if random.uniform(0, 1) < 0.5:
                 img0 = img0[::-1]
                 img1 = img1[::-1]
