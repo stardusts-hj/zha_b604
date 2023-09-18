@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np 
 import torch.nn.functional as F
+import lpips
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -105,11 +106,75 @@ class CharbonnierLoss(nn.Module):
         loss = torch.mean(torch.sqrt((diff * diff) + (self.eps*self.eps)))
         return loss
 
-## ssim loss
-class SSIMloss(nn.Module):
-    """ssim loss"""
-    def __init__(self) -> None:
-        super().__init__()
+## lpis loss
+class LPIPS(nn.Module):
+    def __init__(self, net='alex', cuda=True):
+        super(LPIPS, self).__init__()
+        self.net = net
+        self.model = lpips.LPIPS(net=net)
+        if cuda:
+            self.model.cuda()
+
+    def forward(self, im0, im1):
+        return self.model.forward(im0, im1)
+
+"""
+# cuda
+loss = LPIPS()
+fn = loss(img1, img2)
+"""
+
+## cycle consistency loss
+"""
+https://openaccess.thecvf.com/content_ICCV_2019/papers/Reda_Unsupervised_Video_Interpolation_Using_Cycle_Consistency_ICCV_2019_paper.pdf
+https://github.dev/NVIDIA/unsupervised-video-interpolation
+"""
+class CCLoss(nn.Module):
+    pass
+
+## optical smoothness loss
+"""
+flow [:, :, :, :]
+https://github.dev/avinashpaliwal/Super-SloMo
+"""
+class Smoothloss(nn.Module):
+    def __init__(self):
+        super(Smoothloss, self).__init__()
+        self.l1 = nn.L1Loss(reduce='mean')
+    def forward(self, flow):
+        fw = flow[:, :2, :, :]
+        bw = flow[:, 2:, :, :]
+        smooth_fwd = self.l1(fw[:,:,:,:-1], fw[:,:,:,1:]) + self.l1(fw[:,:,:-1,:], fw[:,:,1:,:])
+        smotth_bwd = self.l1(bw[:,:,:,:-1], bw[:,:,:,1:]) + self.l1(bw[:,:,:-1,:], bw[:,:,1:,:])
+        return smooth_fwd + smotth_bwd
+
+
+## warping loss
+"""
+输入: img1, img3, gt, predf, predb, pred1, pred3
+img1 和 img3, t ,输出 predf 预测 中间帧 gt
+img3 和 img1, 1-t, 输出 predb 预测中间帧 gt
+img1 和 t=1 , 输出 pred3 预测 img3
+img3 和 t=1 , 输出 pred1 预测 img1
+https://github.dev/avinashpaliwal/Super-SloMo
+""" 
+class WarpingLoss(nn.Module):
+    def __init__(self):
+        super(WarpingLoss, self).__init__()
+        self.l1 = nn.L1Loss()
+    def forward(self, img1, img3, gt, predf, predb, pred1, pred3):
+        warploss = self.L1(predf, gt) + self.L1(predb, gt) + self.L1(pred1, img1) + self.L1(pred3, img3)
+        return warploss
+    
+
+
+
+# loss parameters
+"""
+charbonnierloss   lpipsloss   warpingloss  smoothloss     cc
+0.8               0.005         0.4         1 
+"""
+
 
 if __name__ == '__main__':
     device = 'cpu'
