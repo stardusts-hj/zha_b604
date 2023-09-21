@@ -121,8 +121,7 @@ class NAF_Unet(nn.Module):
                 )
             )
         
-    def forward(self, inp):
-        
+    def forward(self, inp):    
         x = self.intro(inp)
 
         encs = []

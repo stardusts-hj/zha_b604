@@ -143,7 +143,7 @@ class Smoothloss(nn.Module):
         self.l1 = nn.L1Loss(reduce='mean')
     def forward(self, flow):
         fw = flow[:, :2, :, :]
-        bw = flow[:, 2:, :, :]
+        bw = flow[:, 2:4, :, :]
         smooth_fwd = self.l1(fw[:,:,:,:-1], fw[:,:,:,1:]) + self.l1(fw[:,:,:-1,:], fw[:,:,1:,:])
         smotth_bwd = self.l1(bw[:,:,:,:-1], bw[:,:,:,1:]) + self.l1(bw[:,:,:-1,:], bw[:,:,1:,:])
         return smooth_fwd + smotth_bwd
@@ -161,9 +161,10 @@ https://github.dev/avinashpaliwal/Super-SloMo
 class WarpingLoss(nn.Module):
     def __init__(self):
         super(WarpingLoss, self).__init__()
-        self.l1 = nn.L1Loss()
-    def forward(self, img1, img3, gt, predf, predb, pred1, pred3):
-        warploss = self.L1(predf, gt) + self.L1(predb, gt) + self.L1(pred1, img1) + self.L1(pred3, img3)
+        self.l1 = nn.L1Loss(reduce='mean')
+    def forward(self, img1, img3, gt, pred, pred1, pred3):
+        #warploss = self.L1(predf, gt) + self.L1(predb, gt) + self.L1(pred1, img1) + self.L1(pred3, img3)
+        warploss = 2 * self.l1(pred, gt)  + self.l1(pred1, img1) + self.l1(pred3, img3)
         return warploss
     
 
