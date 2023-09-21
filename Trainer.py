@@ -20,6 +20,11 @@ class Model:
         # num_parameters = sum(map(lambda x: x.numel(), self.net.parameters()))
         # print(num_parameters/1e6)
         self.lap = LapLoss()
+        self.char = CharbonnierLoss()
+        self.lpips = LPIPS()
+        self.smoothloss = Smoothloss()
+        self.warpingloss = WarpingLoss()
+        self.ter = Ternary(torch.device("cuda"))
         if local_rank != -1:
             self.net = DDP(self.net, device_ids=[local_rank], output_device=local_rank)
 
@@ -148,20 +153,31 @@ class Model:
             self.train()
         else:
             self.eval()
-
+        
         if training:
+            img1 = imgs[:, :3]
+            img3 = imgs[:, 3:6]
             pred, extra_info = self.net(imgs, timestamp=emb_t)
+           
             # loss = F.mse_loss(pred, gt)
-            loss_l1 = (self.lap(pred, gt)).mean()
+            ## char loss
+            loss_char = self.char(pred, gt)
+            ## lpips loss
+            loss_lpips = self.lpips(pred, gt).sum()
+            ## smooth loss
+            loss_smoo = self.smoothloss(extra_info['flow']).sum()
+            # ## warp loss
+            loss_warp = self.warpingloss(img1, img3, gt, pred, extra_info['warped_img10'], extra_info['warped_img01']).sum()
 
-            # for merge in merged:
-            #     loss_l1 += (self.lap(merge, gt)).mean() * 0.5
-
+            loss_ter = self.ter(pred, gt).mean()
+            #loss_total = 0.8 * loss_char + 0.005 * loss_lpips + 0.4*loss_warp + 1 * loss_smoo
+           
+            loss_total = 0.8 * loss_char +  0.005 * loss_lpips + 0.8*loss_ter + 0.4 * loss_warp
             self.optimG.zero_grad()
-            loss_l1.backward()
+            loss_total.backward()
             # loss.backward()
             self.optimG.step()
-            return pred, loss_l1
+            return pred, loss_total
             # return pred, loss
         else: 
             with torch.no_grad():

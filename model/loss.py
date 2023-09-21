@@ -145,8 +145,8 @@ class Smoothloss(nn.Module):
         fw = flow[:, :2, :, :]
         bw = flow[:, 2:4, :, :]
         smooth_fwd = self.l1(fw[:,:,:,:-1], fw[:,:,:,1:]) + self.l1(fw[:,:,:-1,:], fw[:,:,1:,:])
-        smotth_bwd = self.l1(bw[:,:,:,:-1], bw[:,:,:,1:]) + self.l1(bw[:,:,:-1,:], bw[:,:,1:,:])
-        return smooth_fwd + smotth_bwd
+        smooth_bwd = self.l1(bw[:,:,:,:-1], bw[:,:,:,1:]) + self.l1(bw[:,:,:-1,:], bw[:,:,1:,:])
+        return smooth_fwd + smooth_bwd
 
 
 ## warping loss
@@ -157,6 +157,8 @@ img3 和 img1, 1-t, 输出 predb 预测中间帧 gt
 img1 和 t=1 , 输出 pred3 预测 img3
 img3 和 t=1 , 输出 pred1 预测 img1
 https://github.dev/avinashpaliwal/Super-SloMo
+
+img1, img3, gt, pred, extra_info['warped_img10'], extra_info['warped_img01']
 """ 
 class WarpingLoss(nn.Module):
     def __init__(self):
@@ -166,14 +168,40 @@ class WarpingLoss(nn.Module):
         #warploss = self.L1(predf, gt) + self.L1(predb, gt) + self.L1(pred1, img1) + self.L1(pred3, img3)
         warploss = 2 * self.l1(pred, gt)  + self.l1(pred1, img1) + self.l1(pred3, img3)
         return warploss
-    
+
+# psnr loss    
+class PSNRLoss(nn.Module):
+    """PSNR Loss in "HINet: Half Instance Normalization Network for Image
+    Restoration".
+
+    Args:
+        loss_weight (float, optional): Loss weight. Defaults to 1.0.
+        reduction: reduction for PSNR. Can only be mean here.
+        toY: change to calculate the PSNR of Y channel in YCbCr format
+    """
+
+    def __init__(self, loss_weight: float = 1.0, toY: bool = False) -> None:
+        super(PSNRLoss, self).__init__()
+        self.loss_weight = loss_weight
+        self.scale = 10 / np.log(10)
+        self.toY = toY
+        self.coef = torch.tensor([65.481, 128.553, 24.966]).reshape(1, 3, 1, 1)
+        self.first = True
+
+    def forward(self, pred: torch.Tensor,
+                target: torch.Tensor) -> torch.Tensor:
+        assert len(pred.size()) == 4
+
+        return self.loss_weight * self.scale * torch.log((
+            (pred - target)**2).mean(dim=(1, 2, 3)) + 1e-8).mean()
 
 
-
-# loss parameters
+## loss parameters
 """
 charbonnierloss   lpipsloss   warpingloss  smoothloss     cc
 0.8               0.005         0.4         1 
+
+ loss_l1+loss_cons*0.01+loss_vgg
 """
 
 
