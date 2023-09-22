@@ -3,9 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import sys
 sys.path.append('.')
-from utils.model_summary import get_model_flops
-from model.warplayer import warp
-from model.feature_extractor import MotionFormer
+from warplayer import warp
+from feature_extractor import MotionFormer
 
 
 
@@ -105,9 +104,9 @@ class Head(nn.Module):
         self.upsample = nn.Sequential(nn.PixelShuffle(2), nn.PixelShuffle(2))
         self.scale = scale
         self.conv = nn.Sequential(
-                                  conv(in_planes*2 // (4*4) + in_else, c, dw=True),
-                                  conv(c, c, dw=True),
-                                  conv(c, 4+fc, dw=True),
+                                  conv(in_planes*2 // (4*4) + in_else, c),
+                                  conv(c, c),
+                                  conv(c, 4+fc),
                                   )
 
     def forward(self, motion_feature, x, flow): # /16 /8 /4
@@ -161,9 +160,8 @@ class EMA_Backbone(nn.Module):
                                             torch.cat((img0, img1), 1), None)
             # feature_list.append(feature)
             # flow_list.append(flow)
-            if i < self.flow_num_stage - 1:
-                warped_img0 = warp(img0, flow[:, :2].contiguous())
-                warped_img1 = warp(img1, flow[:, 2:4].contiguous())
+            warped_img0 = warp(img0, flow[:, :2].contiguous())
+            warped_img1 = warp(img1, flow[:, 2:4].contiguous())
             
         
 

@@ -119,7 +119,7 @@ if __name__ == "__main__":
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.benchmark = True
     
-    log_dir = 'output_lap_char'
+    log_dir = 'debug/output_lap_char'
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
     format_str = '%(asctime)s %(levelname)s: %(message)s'

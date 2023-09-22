@@ -4,6 +4,7 @@ import numpy as np
 import torch.nn.functional as F
 import lpips
 import torchvision.models as models
+import torchvision
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -93,7 +94,7 @@ class Ternary(nn.Module):
     def forward(self, img0, img1):
         img0 = self.transform(self.rgb2gray(img0))
         img1 = self.transform(self.rgb2gray(img1))
-        return self.hamming(img0, img1) * self.valid_mask(img0, 1)
+        return (self.hamming(img0, img1) * self.valid_mask(img0, 1)).mean()
 
 class Charbonnier_Loss(nn.Module):
     def __init__(self):
@@ -123,28 +124,87 @@ class MeanShift(nn.Conv2d):
         self.requires_grad = False
 
 ## perceptual loss:  note X ad Y is not the same
-class VGGPerceptualLoss(nn.Module):
-    def __init__(self, rank=0):
-        super(VGGPerceptualLoss, self).__init__()
-        blocks = []
-        pretrained = True
-        self.vgg_pretrained_features = models.vgg19(pretrained=pretrained).features
-        self.normalize = MeanShift([0.485, 0.456, 0.406], [0.229, 0.224, 0.225], norm=True).cuda()
-        for param in self.parameters():
-            param.requires_grad = False
+class VGGFeatureExtractor(nn.Module):
+    def __init__(self, feature_layer=[2,7,16,25,34], use_input_norm=True, use_range_norm=False):
+        super(VGGFeatureExtractor, self).__init__()
+        '''
+        use_input_norm: If True, x: [0, 1] --> (x - mean) / std
+        use_range_norm: If True, x: [0, 1] --> x: [-1, 1]
+        '''
+        model = torchvision.models.vgg19(pretrained=True)
+        self.use_input_norm = use_input_norm
+        self.use_range_norm = use_range_norm
+        if self.use_input_norm:
+            mean = torch.Tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
+            std = torch.Tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1)
+            self.register_buffer('mean', mean)
+            self.register_buffer('std', std)
+        self.list_outputs = isinstance(feature_layer, list)
+        if self.list_outputs:
+            self.features = nn.Sequential()
+            feature_layer = [-1] + feature_layer
+            for i in range(len(feature_layer)-1):
+                self.features.add_module('child'+str(i), nn.Sequential(*list(model.features.children())[(feature_layer[i]+1):(feature_layer[i+1]+1)]))
+        else:
+            self.features = nn.Sequential(*list(model.features.children())[:(feature_layer + 1)])
 
-    def forward(self, X, Y, indices=None):
-        X = self.normalize(X)
-        Y = self.normalize(Y)
-        indices = [2, 7, 12, 21, 30]
-        weights = [1.0/2.6, 1.0/4.8, 1.0/3.7, 1.0/5.6, 10/1.5]
-        k = 0
-        loss = 0
-        for i in range(indices[-1]):
-            X = self.vgg_pretrained_features[i](X)
-            Y = self.vgg_pretrained_features[i](Y)
-            if (i+1) in indices:
-                loss += weights[k] * (X - Y.detach()).abs().mean() * 0.1
-                k += 1
+        print(self.features)
+
+        # No need to BP to variable
+        for k, v in self.features.named_parameters():
+            v.requires_grad = False
+
+    def forward(self, x):
+        if self.use_range_norm:
+            x = (x + 1.0) / 2.0
+        if self.use_input_norm:
+            x = (x - self.mean) / self.std
+        if self.list_outputs:
+            output = []
+            for child_model in self.features.children():
+                x = child_model(x)
+                output.append(x.clone())
+            return output
+        else:
+            return self.features(x)
+
+
+class PerceptualLoss(nn.Module):
+    """VGG Perceptual loss
+    """
+
+    def __init__(self, feature_layer=[2,7,16,25,34], weights=[0.1,0.1,1.0,1.0,1.0], lossfn_type='l1', use_input_norm=True, use_range_norm=False):
+        super(PerceptualLoss, self).__init__()
+        self.vgg = VGGFeatureExtractor(feature_layer=feature_layer, use_input_norm=use_input_norm, use_range_norm=use_range_norm)
+        self.lossfn_type = lossfn_type
+        self.weights = weights
+        if self.lossfn_type == 'l1':
+            self.lossfn = nn.L1Loss()
+        else:
+            self.lossfn = nn.MSELoss()
+        print(f'feature_layer: {feature_layer}  with weights: {weights}')
+
+    def forward(self, x, gt):
+        """Forward function.
+        Args:
+            x (Tensor): Input tensor with shape (n, c, h, w).
+            gt (Tensor): Ground-truth tensor with shape (n, c, h, w).
+        Returns:
+            Tensor: Forward results.
+        """
+        x_vgg, gt_vgg = self.vgg(x), self.vgg(gt.detach())
+        loss = 0.0
+        if isinstance(x_vgg, list):
+            n = len(x_vgg)
+            for i in range(n):
+                loss += self.weights[i] * self.lossfn(x_vgg[i], gt_vgg[i])
+        else:
+            loss += self.lossfn(x_vgg, gt_vgg.detach())
         return loss
 
+
+if __name__== '__main__':
+    x = torch.randn(1,3,256,256).cuda()
+    y = torch.randn(1,3,256,256).cuda()
+    loss = PerceptualLoss().cuda()
+    print(loss(x, y))

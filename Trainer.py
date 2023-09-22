@@ -16,7 +16,7 @@ class Model:
         self.device()
         # train
         self.optimG = AdamW(self.net.parameters(), lr=2e-4, weight_decay=1e-4)
-        self.cri = cf.Total_Loss()
+        self.cri = cf.Total_Loss().to(torch.device("cuda"))
         if local_rank == 0:
             logger = logging.getLogger('train')
             msg = 'loss type: ' + ' + '.join([str(type(x)) for x in self.cri.loss])
