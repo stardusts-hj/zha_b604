@@ -3,3 +3,4 @@ example/*
 logs/*
 *.pyc
 benckmark/*
+**/__pycache__
