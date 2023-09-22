@@ -2,3 +2,5 @@ timm
 opencv-python
 tensorboard
 logging
+ptflops
+lpips
