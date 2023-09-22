@@ -1,6 +1,9 @@
 data/*
 example/*
 logs/*
+log
 *.pyc
 benckmark/*
 **/__pycache__
+0013
+output*
