@@ -5,7 +5,7 @@ import sys
 sys.path.append('.')
 from utils.model_summary import get_model_flops
 from model.warplayer import warp
-from model.feature_extractor import MotionFormer
+from model.feature_extractor import MotionFormer,MotionFormer2
 
 
 
@@ -133,6 +133,79 @@ class EMA_Backbone(nn.Module):
         super(EMA_Backbone, self).__init__()
         self.flow_num_stage = len(kargs['hidden_dims'])
         self.backbone = MotionFormer(**kargs)
+        self.block = nn.ModuleList([Head(kargs['motion_dims'][-1-i] * kargs['depths'][-1-i] + kargs['embed_dims'][-1-i],
+                            kargs['scales'][-1-i], 
+                            kargs['hidden_dims'][-1-i],
+                            6 if i==0 else 3*4+4+kargs['fc'],
+                            kargs['fc']) 
+                            for i in range(self.flow_num_stage)])
+        
+    def forward(self, x):
+        img0 = x[:, :3].contiguous()
+        img1 = x[:, 3:6].contiguous()
+        B = x.size(0)
+        # feature_list = []
+        # flow_list = []
+        af, mf = self.backbone(img0, img1)
+        flow = None
+
+        for i in range(self.flow_num_stage):
+            # t = torch.full(mf[-1-i][:B].shape, timestamp, dtype=torch.float).cuda()
+            if flow != None:
+                flow_d, feature_d = self.block[i]( torch.cat([mf[-1-i][:B], mf[-1-i][B:],af[-1-i][:B],af[-1-i][B:]],1), 
+                                                torch.cat((img0, img1, warped_img0, warped_img1, feature), 1), flow)
+                flow = flow + flow_d
+                feature = feature + feature_d
+            else:
+                flow, feature = self.block[i]( torch.cat([mf[-1-i][:B], mf[-1-i][B:],af[-1-i][:B],af[-1-i][B:]],1), 
+                                            torch.cat((img0, img1), 1), None)
+            # feature_list.append(feature)
+            # flow_list.append(flow)
+            warped_img0 = warp(img0, flow[:, :2].contiguous())
+            warped_img1 = warp(img1, flow[:, 2:4].contiguous())
+            
+        
+
+
+        return flow, feature
+    
+    
+############################ EMA-VFIv2 backbone ############################
+
+class Head(nn.Module):
+    def __init__(self, in_planes, scale, c, in_else=17,fc=32):
+        super(Head, self).__init__()
+        self.upsample = nn.Sequential(nn.PixelShuffle(2), nn.PixelShuffle(2))
+        self.scale = scale
+        self.conv = nn.Sequential(
+                                  conv(in_planes*2 // (4*4) + in_else, c),
+                                  conv(c, c),
+                                  conv(c, 4+fc),
+                                  )
+
+    def forward(self, motion_feature, x, flow): # /16 /8 /4
+        motion_feature = self.upsample(motion_feature) #/4 /2 /1
+        if self.scale != 4:
+            x = F.interpolate(x, scale_factor = 4. / self.scale, mode="bilinear", align_corners=False)
+        if flow != None:
+            if self.scale != 4:
+                flow = F.interpolate(flow, scale_factor = 4. / self.scale, mode="bilinear", align_corners=False) * 4. / self.scale
+            x = torch.cat((x, flow), 1)
+        x = self.conv(torch.cat([motion_feature, x], 1))
+        if self.scale != 4:
+            x = F.interpolate(x, scale_factor = self.scale // 4, mode="bilinear", align_corners=False)
+            flow = x[:, :4].contiguous() * (self.scale // 4)
+        else:
+            flow = x[:, :4].contiguous()
+        feature = x[:, 4:].contiguous()
+        return flow, feature
+
+
+class EMAv2_Backbone(nn.Module):
+    def __init__(self, **kargs):
+        super(EMAv2_Backbone, self).__init__()
+        self.flow_num_stage = len(kargs['hidden_dims'])
+        self.backbone = MotionFormer2(**kargs)
         self.block = nn.ModuleList([Head(kargs['motion_dims'][-1-i] * kargs['depths'][-1-i] + kargs['embed_dims'][-1-i],
                             kargs['scales'][-1-i], 
                             kargs['hidden_dims'][-1-i],
