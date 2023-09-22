@@ -115,17 +115,14 @@ class VimeoDatasetArbi(Dataset):
 
     
 if __name__ == '__main__':
-    data_path = "data"
-    batch_size = 4
+    data_path = r"/data/lbh666/VFI"
+    batch_size = 100
     dataset = VimeoDatasetArbi('train', data_path)
-    train_data = DataLoader(dataset, batch_size=batch_size, num_workers=0, pin_memory=True, drop_last=False)
-    x = torch.range(0,4*8*8-1).reshape(4,1,8,8)
-    print(x)
+    train_data = DataLoader(dataset, batch_size=batch_size, num_workers=8, pin_memory=True, drop_last=True)
     for i, imgs in enumerate(train_data):
         imgs = imgs
-        timestep = imgs[1].reshape(-1,1,1,1)
-        print(x*timestep)
+        
         img = imgs[0] # [8, 9, 256, 448]      img0, gt, img1
-        # timestep = imgs[1].reshape(-1,1,1,1)  # [8]     timestep
+        timestep = imgs[1]  # [8]     timestep
         #
         print(i)

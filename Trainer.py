@@ -6,7 +6,7 @@ from model.loss import *
 from model.warplayer import warp
 from model.Full_Model import FullModel
 import importlib
-
+import logging
 
 class Model:
     def __init__(self, local_rank, config):
@@ -14,17 +14,14 @@ class Model:
         self.net = FullModel(**cf.MODEL_CONFIG)
         self.name = cf.MODEL_CONFIG['LOGNAME']
         self.device()
-
         # train
         self.optimG = AdamW(self.net.parameters(), lr=2e-4, weight_decay=1e-4)
-        # num_parameters = sum(map(lambda x: x.numel(), self.net.parameters()))
-        # print(num_parameters/1e6)
-        self.lap = LapLoss()
-        self.char = CharbonnierLoss()
-        self.lpips = LPIPS()
-        self.smoothloss = Smoothloss()
-        self.warpingloss = WarpingLoss()
-        self.ter = Ternary(torch.device("cuda"))
+        self.cri = cf.Total_Loss()
+        if local_rank == 0:
+            logger = logging.getLogger('train')
+            msg = 'loss type: ' + ' + '.join([str(type(x)) for x in self.cri.loss])
+            logger.info(msg)
+        
         if local_rank != -1:
             self.net = DDP(self.net, device_ids=[local_rank], output_device=local_rank)
 
@@ -153,32 +150,21 @@ class Model:
             self.train()
         else:
             self.eval()
-        
-        if training:
-            img1 = imgs[:, :3]
-            img3 = imgs[:, 3:6]
-            pred, extra_info = self.net(imgs, timestamp=emb_t)
-           
-            # loss = F.mse_loss(pred, gt)
-            ## char loss
-            loss_char = self.char(pred, gt)
-            ## lpips loss
-            loss_lpips = self.lpips(pred, gt).sum()
-            ## smooth loss
-            loss_smoo = self.smoothloss(extra_info['flow']).sum()
-            # ## warp loss
-            loss_warp = self.warpingloss(img1, img3, gt, pred, extra_info['warped_img10'], extra_info['warped_img01']).sum()
 
-            loss_ter = self.ter(pred, gt).mean()
-            #loss_total = 0.8 * loss_char + 0.005 * loss_lpips + 0.4*loss_warp + 1 * loss_smoo
-           
-            loss_total = 0.8 * loss_char +  0.005 * loss_lpips + 0.8*loss_ter + 0.4 * loss_warp
+        if training:
+            pred, extra_info = self.net(imgs, timestamp=emb_t)
+            loss = self.cri(pred, gt)
+            # loss_l1 = (self.lap(pred, gt)).mean()
+
+            # for merge in merged:
+            #     loss_l1 += (self.lap(merge, gt)).mean() * 0.5
+
             self.optimG.zero_grad()
-            loss_total.backward()
-            # loss.backward()
+            # loss_l1.backward()
+            loss.backward()
             self.optimG.step()
-            return pred, loss_total
-            # return pred, loss
+            # return pred, loss_l1
+            return pred, loss
         else: 
             with torch.no_grad():
                 pred, extra_info = self.net(imgs, timestamp=emb_t)

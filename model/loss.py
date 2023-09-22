@@ -3,6 +3,7 @@ import torch.nn as nn
 import numpy as np 
 import torch.nn.functional as F
 import lpips
+import torchvision.models as models
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -94,121 +95,56 @@ class Ternary(nn.Module):
         img1 = self.transform(self.rgb2gray(img1))
         return self.hamming(img0, img1) * self.valid_mask(img0, 1)
 
-## charbonnierloss  
-class CharbonnierLoss(nn.Module):
-    """Charbonnier Loss (L1)"""
-    def __init__(self, eps=1e-3):
-        super(CharbonnierLoss, self).__init__()
-        self.eps = eps
+class Charbonnier_Loss(nn.Module):
+    def __init__(self):
+        super(Charbonnier_Loss, self).__init__()
 
-    def forward(self, x, y):
-        diff = x - y
-        loss = torch.mean(torch.sqrt((diff * diff) + (self.eps*self.eps)))
+    def forward(self, img0, img1, mask=None):
+        if mask is None:
+            loss = (((img0 - img1) ** 2 + 1e-6) ** 0.5).mean()
+        else:
+            loss = ((((img0 - img1) ** 2 + 1e-6) ** 0.5) * mask).mean() / (mask.mean() + 1e-9)
+        return loss
+    
+
+class MeanShift(nn.Conv2d):
+    def __init__(self, data_mean, data_std, data_range=1, norm=True):
+        c = len(data_mean)
+        super(MeanShift, self).__init__(c, c, kernel_size=1)
+        std = torch.Tensor(data_std)
+        self.weight.data = torch.eye(c).view(c, c, 1, 1)
+        if norm:
+            self.weight.data.div_(std.view(c, 1, 1, 1))
+            self.bias.data = -1 * data_range * torch.Tensor(data_mean)
+            self.bias.data.div_(std)
+        else:
+            self.weight.data.mul_(std.view(c, 1, 1, 1))
+            self.bias.data = data_range * torch.Tensor(data_mean)
+        self.requires_grad = False
+
+## perceptual loss:  note X ad Y is not the same
+class VGGPerceptualLoss(nn.Module):
+    def __init__(self, rank=0):
+        super(VGGPerceptualLoss, self).__init__()
+        blocks = []
+        pretrained = True
+        self.vgg_pretrained_features = models.vgg19(pretrained=pretrained).features
+        self.normalize = MeanShift([0.485, 0.456, 0.406], [0.229, 0.224, 0.225], norm=True).cuda()
+        for param in self.parameters():
+            param.requires_grad = False
+
+    def forward(self, X, Y, indices=None):
+        X = self.normalize(X)
+        Y = self.normalize(Y)
+        indices = [2, 7, 12, 21, 30]
+        weights = [1.0/2.6, 1.0/4.8, 1.0/3.7, 1.0/5.6, 10/1.5]
+        k = 0
+        loss = 0
+        for i in range(indices[-1]):
+            X = self.vgg_pretrained_features[i](X)
+            Y = self.vgg_pretrained_features[i](Y)
+            if (i+1) in indices:
+                loss += weights[k] * (X - Y.detach()).abs().mean() * 0.1
+                k += 1
         return loss
 
-## lpis loss
-class LPIPS(nn.Module):
-    def __init__(self, net='alex', cuda=True):
-        super(LPIPS, self).__init__()
-        self.net = net
-        self.model = lpips.LPIPS(net=net)
-        if cuda:
-            self.model.cuda()
-
-    def forward(self, im0, im1):
-        return self.model.forward(im0, im1)
-
-"""
-# cuda
-loss = LPIPS()
-fn = loss(img1, img2)
-"""
-
-## cycle consistency loss
-"""
-https://openaccess.thecvf.com/content_ICCV_2019/papers/Reda_Unsupervised_Video_Interpolation_Using_Cycle_Consistency_ICCV_2019_paper.pdf
-https://github.dev/NVIDIA/unsupervised-video-interpolation
-"""
-class CCLoss(nn.Module):
-    pass
-
-## optical smoothness loss
-"""
-flow [:, :, :, :]
-https://github.dev/avinashpaliwal/Super-SloMo
-"""
-class Smoothloss(nn.Module):
-    def __init__(self):
-        super(Smoothloss, self).__init__()
-        self.l1 = nn.L1Loss(reduce='mean')
-    def forward(self, flow):
-        fw = flow[:, :2, :, :]
-        bw = flow[:, 2:4, :, :]
-        smooth_fwd = self.l1(fw[:,:,:,:-1], fw[:,:,:,1:]) + self.l1(fw[:,:,:-1,:], fw[:,:,1:,:])
-        smooth_bwd = self.l1(bw[:,:,:,:-1], bw[:,:,:,1:]) + self.l1(bw[:,:,:-1,:], bw[:,:,1:,:])
-        return smooth_fwd + smooth_bwd
-
-
-## warping loss
-"""
-输入: img1, img3, gt, predf, predb, pred1, pred3
-img1 和 img3, t ,输出 predf 预测 中间帧 gt
-img3 和 img1, 1-t, 输出 predb 预测中间帧 gt
-img1 和 t=1 , 输出 pred3 预测 img3
-img3 和 t=1 , 输出 pred1 预测 img1
-https://github.dev/avinashpaliwal/Super-SloMo
-
-img1, img3, gt, pred, extra_info['warped_img10'], extra_info['warped_img01']
-""" 
-class WarpingLoss(nn.Module):
-    def __init__(self):
-        super(WarpingLoss, self).__init__()
-        self.l1 = nn.L1Loss(reduce='mean')
-    def forward(self, img1, img3, gt, pred, pred1, pred3):
-        #warploss = self.L1(predf, gt) + self.L1(predb, gt) + self.L1(pred1, img1) + self.L1(pred3, img3)
-        warploss = 2 * self.l1(pred, gt)  + self.l1(pred1, img1) + self.l1(pred3, img3)
-        return warploss
-
-# psnr loss    
-class PSNRLoss(nn.Module):
-    """PSNR Loss in "HINet: Half Instance Normalization Network for Image
-    Restoration".
-
-    Args:
-        loss_weight (float, optional): Loss weight. Defaults to 1.0.
-        reduction: reduction for PSNR. Can only be mean here.
-        toY: change to calculate the PSNR of Y channel in YCbCr format
-    """
-
-    def __init__(self, loss_weight: float = 1.0, toY: bool = False) -> None:
-        super(PSNRLoss, self).__init__()
-        self.loss_weight = loss_weight
-        self.scale = 10 / np.log(10)
-        self.toY = toY
-        self.coef = torch.tensor([65.481, 128.553, 24.966]).reshape(1, 3, 1, 1)
-        self.first = True
-
-    def forward(self, pred: torch.Tensor,
-                target: torch.Tensor) -> torch.Tensor:
-        assert len(pred.size()) == 4
-
-        return self.loss_weight * self.scale * torch.log((
-            (pred - target)**2).mean(dim=(1, 2, 3)) + 1e-8).mean()
-
-
-## loss parameters
-"""
-charbonnierloss   lpipsloss   warpingloss  smoothloss     cc
-0.8               0.005         0.4         1 
-
- loss_l1+loss_cons*0.01+loss_vgg
-"""
-
-
-if __name__ == '__main__':
-    device = 'cpu'
-    img0 = torch.zeros(3, 3, 256, 256).float().to(device)
-    img1 = torch.tensor(np.random.normal(
-        0, 1, (3, 3, 256, 256))).float().to(device)
-    ternary_loss = Ternary(device)
-    print(ternary_loss(img0, img1).shape)

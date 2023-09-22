@@ -20,24 +20,14 @@ exp = os.path.abspath('.').split('/')[-1]
 def get_learning_rate(step):
     if step < args.warm_up:
         mul = step / args.warm_up
-        return 2e-3 * mul
+        return args.lr * mul
     else:
         mul = np.cos((step - args.warm_up) / (args.epoch * args.step_per_epoch - args.warm_up) * math.pi) * 0.5 + 0.5
-        return (2e-3 - 2e-5) * mul + 2e-5
+        return (args.lr - 2e-5) * mul + 2e-5
 
 def train(model, local_rank, batch_size, data_path, log_dir):
-    if local_rank == 0:
-        writer = SummaryWriter(log_dir+'/logs', filename_suffix='train')
-        
-        format_str = '%(asctime)s %(levelname)s: %(message)s'
-        logging.basicConfig(format=format_str, level=logging.INFO)
-        logger = logging.getLogger('train')
-        file_handler = logging.FileHandler(log_dir+'/log.txt', 'w')
-        file_handler.setFormatter(logging.Formatter(format_str))
-        file_handler.setLevel(logging.INFO)
-        logger.addHandler(file_handler)
-        msg = ['get configs'] + [f'{k} : {v} ' for k, v in args._get_kwargs()] + ['\n']
-        logger.info('\n'.join(msg))
+
+
     step = 0
     nr_eval = 0
     dataset = VimeoDatasetArbi('train', data_path)
@@ -47,6 +37,14 @@ def train(model, local_rank, batch_size, data_path, log_dir):
     dataset_val = VimeoDatasetArbi('test', data_path)
     val_data = DataLoader(dataset_val, batch_size=batch_size, pin_memory=True, num_workers=8)
     
+    if local_rank == 0:
+        writer = SummaryWriter(log_dir+'/logs', filename_suffix='train')
+        
+        logger = logging.getLogger('train')
+        logger.addHandler(file_handler)
+        msg = ['get configs'] + [f'{k} : {v} ' for k, v in args._get_kwargs()] + [f'iter per epoch: {args.step_per_epoch}'] + \
+                [f'total iters: {args.step_per_epoch * args.epoch}'] + ['\n']
+        logger.info('\n'.join(msg))
     
     if local_rank == 0:
         logger.info(f'training..., total epoch:{args.epoch:d}')
@@ -73,10 +71,10 @@ def train(model, local_rank, batch_size, data_path, log_dir):
                 ave_loss = 0
             step += 1
         nr_eval += 1
-        if nr_eval % 30 == 0 and local_rank == 0:
+        if nr_eval % 3 == 0 and local_rank == 0:
             evaluate(model, val_data, nr_eval, writer, logger)
-        if nr_eval % 300 == 0 and local_rank == 0:
-            model.save_model(f'{log_dir}/{nr_eval}.pkl', local_rank)    
+        if nr_eval % 10 == 0 and local_rank == 0:
+            model.save_model(f'{log_dir}/{nr_eval}.pkl', local_rank)
             
         dist.barrier()
 
@@ -98,13 +96,14 @@ def evaluate(model, val_data, nr_eval, writer, logger):
         
 if __name__ == "__main__":    
     parser = argparse.ArgumentParser()
-    parser.add_argument('--epoch', default=30000, type=int)
-    parser.add_argument('--warm_up', default=200, type=int)
+    parser.add_argument('--lr', default=2e-4, type=float)
+    parser.add_argument('--epoch', default=300, type=int)
+    parser.add_argument('--warm_up', default=2000, type=int)
     parser.add_argument('--local_rank', type=int, default=0, help='local rank')
     parser.add_argument('--world_size', type=int, default=4, help='world size')
     parser.add_argument('--batch_size', type=int, default=8, help='batch size')
-    parser.add_argument('--data_path', type=str, default='data', help='data path of vimeo90k')
-    parser.add_argument('--config', type=str, default='baseline', help='path of configs')
+    parser.add_argument('--data_path', type=str, default='/data1/dataset/NeurIPS_CellSegData/vimeo90k/', help='data path of vimeo90k')
+    parser.add_argument('--config', type=str, default='baseline_lap_char', help='path of configs')
     args = parser.parse_args()
     torch.distributed.init_process_group(backend="nccl", world_size=args.world_size)
     rank, world_size = torch.distributed.get_rank(), torch.distributed.get_world_size()
@@ -119,6 +118,18 @@ if __name__ == "__main__":
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.benchmark = True
+    
+    log_dir = 'output_lap_char'
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+    format_str = '%(asctime)s %(levelname)s: %(message)s'
+    logging.basicConfig(format=format_str, level=logging.INFO)
+    if device_id == 0:
+        logger = logging.getLogger('train')
+        file_handler = logging.FileHandler(log_dir+'/log.txt', 'w')
+        file_handler.setFormatter(logging.Formatter(format_str))
+        file_handler.setLevel(logging.INFO)
+        logger.addHandler(file_handler)
     model = Model(device_id, args.config)
-    train(model, device_id, args.batch_size, args.data_path, log_dir = 'output')
+    train(model, device_id, args.batch_size, args.data_path, log_dir = log_dir)
         

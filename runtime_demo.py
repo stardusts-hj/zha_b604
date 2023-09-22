@@ -5,7 +5,7 @@ import logging
 import argparse
 from tqdm import tqdm
 from collections import OrderedDict
-
+from ptflops import get_model_complexity_info
 from utils import util_logger
 from utils.model_summary import get_model_flops
 import sys
@@ -18,7 +18,7 @@ parser.add_argument("--model-name", type=str, default="baseline")
 parser.add_argument("--save-dir", type=str, default="log")
 
 # specify test case
-parser.add_argument("--repeat", type=int, default=20)
+parser.add_argument("--repeat", type=int, default=50)
 parser.add_argument("--batch-size", type=int, default=1)
 parser.add_argument("--model", type=str, default="ours_small_t")
 
@@ -54,11 +54,11 @@ LOAD MODEL
 assert args.model in ['ours_t', 'ours_small_t'], 'Model not exists!'
 '''==========import from our code=========='''
 sys.path.append('.')
-import configs.baseline as cfg
+import configs.baseline_lap as cfg
 from Trainer import Model
 from benchmark.utils.padder import InputPadder
 
-model = Model(-1, 'debug')
+model = Model(-1, 'baseline_lap_char')
 model.eval()
 model.device()
 
@@ -92,14 +92,13 @@ I0_, I2_ = padder.pad(I0_, I2_)
 
 def input_constructor(input_res):
     batch = torch.Tensor(1, input_res[0]*2, *input_res[1:]).to(device)
-
     return (batch)
 
 # GPU warmp up
 print("Warm up ...")
 with torch.no_grad():
     for _ in range(20): # 50
-        out = pipeline(torch.cat([I0_, I2_], 1), time_list=[(i+1)*(1./args.n) for i in range(args.n - 1)])
+        out = pipeline(torch.cat([I0_, I2_], 1), time_list=[torch.Tensor([(i+1)*(1./args.n)]).cuda() for i in range(args.n - 1)])
     print('input data shape: {} \n model out shape: {}'.format(I0_.shape, out[0].shape))
 print("Start timing ...")
 torch.cuda.synchronize()
@@ -107,7 +106,7 @@ torch.cuda.synchronize()
 with torch.no_grad():
     for _ in tqdm(range(args.repeat)):
         start.record()
-        _ = pipeline(torch.cat([I0_, I2_], 1), time_list=[(i+1)*(1./args.n) for i in range(args.n - 1)])
+        _ = pipeline(torch.cat([I0_, I2_], 1), time_list=[torch.Tensor([(i+1)*(1./args.n)]).cuda() for i in range(args.n - 1)])
         end.record()
 
         torch.cuda.synchronize()
@@ -118,12 +117,20 @@ with torch.no_grad():
     logger.info('------> Average runtime of ({}) is : {:.6f} ms'.format(args.model_name, ave_runtime / args.batch_size))
     logger.info('------> FPS of ({}) is : {:.2f} fps'.format(args.model_name, 1 / (ave_runtime / args.batch_size / 1000.)))
 
-    flops = get_model_flops(network, tuple(I0_.shape[1:]), print_per_layer_stat=False, input_constructor=input_constructor)
-    flops = flops / 1e9
-    logger.info("{:>16s} : {:.4f} [G]".format("FLOPs", flops))
+    # flops = get_model_flops(network, tuple(I0_.shape[1:]), print_per_layer_stat=False, input_constructor=input_constructor)
+    # flops = flops / 1e9
+    # logger.info('thops')
+    # logger.info("{:>16s} : {:.4f} [G]".format("FLOPs", flops))
 
-    num_parameters = sum(map(lambda x: x.numel(), network.parameters()))
-    num_parameters = num_parameters / 1e6
-    logger.info("{:>16s} : {:<.4f} [M]".format("#Params", num_parameters))
+    # num_parameters = sum(map(lambda x: x.numel(), network.parameters()))
+    # num_parameters = num_parameters / 1e6
+    # logger.info("{:>16s} : {:<.4f} [M]".format("#Params", num_parameters))
+    with torch.cuda.device(0):
+        flops, params = get_model_complexity_info(network, (6, *I0_.shape[2:]), as_strings=True)
+    # flops = flops / 1e9
+    # params = params / 1e6
+    logger.info('ptflops')
+    logger.info("{:>16s} : {:s}".format("FLOPs", flops))
+    logger.info("{:>16s} : {:s}".format("#Params", params))
 
 
