@@ -427,9 +427,19 @@ class MotionFormer(nn.Module):
                         mlp_ratio=mlp_ratios[i-self.conv_stages], qkv_bias=qkv_bias, qk_scale=qk_scale,
                         drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[cur + j], norm_layer=norm_layer)
                         for j in range(depths[i])])
+                    
+                    proj = nn.Sequential(
+                        nn.Linear(embed_dims[i],embed_dims[i]*2),
+                        nn.GELU(),
+                        nn.Linear(embed_dims[i]*2,embed_dims[i])
+                    )
+                    
+                    w = nn.Parameter(torch.zeros((1, 1, embed_dims[i])), requires_grad=True)
 
                     norm = norm_layer(embed_dims[i])
                     setattr(self, f"norm{i + 1}", norm)
+                    setattr(self, f"proj{i + 1}", proj)
+                    setattr(self, f"pw{i + 1}", w)
                 setattr(self, f"patch_embed{i + 1}", patch_embed)
             cur += depths[i]
 
@@ -475,6 +485,8 @@ class MotionFormer(nn.Module):
             patch_embed = getattr(self, f"patch_embed{i + 1}",None)
             block = getattr(self, f"block{i + 1}",None)
             norm = getattr(self, f"norm{i + 1}",None)
+            proj = getattr(self, f"proj{i + 1}",None)
+            w = getattr(self, f"pw{i + 1}",None)
             if i < self.conv_stages:
                 if i > 0:
                     x = patch_embed(x)
@@ -486,9 +498,136 @@ class MotionFormer(nn.Module):
                 else:
                     x, H, W = patch_embed(x)
                 cor = self.get_cor((x.shape[0], H, W), x.device)
+                feature_fusion = []
                 for blk in block:
                     x, x_motion = blk(x, cor, H, W, B)
+                    feature_fusion.append(x)
                     motion_features[i].append(x_motion.reshape(2*B, H, W, -1).permute(0, 3, 1, 2).contiguous())
+                x = w*proj(feature_fusion[0]) + (1-w)*feature_fusion[1]
+                x = norm(x)
+                x = x.reshape(2*B, H, W, -1).permute(0, 3, 1, 2).contiguous()
+                motion_features[i] = torch.cat(motion_features[i], 1)
+            appearence_features.append(x)
+        return appearence_features, motion_features
+    
+    
+class MotionFormer2(nn.Module):
+    def __init__(self, in_chans=3, embed_dims=[32, 64, 128, 256, 512], motion_dims=64, num_heads=[8, 16], 
+                 mlp_ratios=[4, 4], qkv_bias=True, qk_scale=None, drop_rate=0.,
+                 attn_drop_rate=0., drop_path_rate=0., norm_layer=nn.LayerNorm,
+                 depths=[2, 2, 2, 6, 2], window_sizes=[11, 11],**kwarg):
+        super().__init__()
+        self.depths = depths
+        self.num_stages = len(embed_dims)
+
+        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths))]  # stochastic depth decay rule
+        cur = 0
+
+        self.conv_stages = self.num_stages - len(num_heads)
+
+        for i in range(self.num_stages):
+            if i == 0:
+                block = ConvBlock(in_chans,embed_dims[i],depths[i])
+            else:
+                if i < self.conv_stages:
+                    patch_embed = nn.Sequential(
+                        nn.Conv2d(embed_dims[i-1], embed_dims[i], 3,2,1),
+                        nn.PReLU(embed_dims[i])
+                    )
+                    block = ConvBlock(embed_dims[i],embed_dims[i],depths[i])
+                else:
+                    if i == self.conv_stages:
+                        patch_embed = CrossScalePatchEmbed(embed_dims[:i],
+                                                        embed_dim=embed_dims[i])
+                    else:
+                        patch_embed = OverlapPatchEmbed(patch_size=3,
+                                                        stride=2,
+                                                        in_chans=embed_dims[i - 1],
+                                                        embed_dim=embed_dims[i])
+
+                    block = nn.ModuleList([MotionFormerBlock(
+                        dim=embed_dims[i], motion_dim=motion_dims[i], num_heads=num_heads[i-self.conv_stages], window_size=window_sizes[i-self.conv_stages], 
+                        shift_size= 0 if (j % 2) == 0 else window_sizes[i-self.conv_stages] // 2,
+                        mlp_ratio=mlp_ratios[i-self.conv_stages], qkv_bias=qkv_bias, qk_scale=qk_scale,
+                        drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[cur + j], norm_layer=norm_layer)
+                        for j in range(depths[i])])
+                    
+                    proj = nn.Sequential(
+                        nn.Linear(embed_dims[i],embed_dims[i]*2),
+                        nn.GELU(),
+                        nn.Linear(embed_dims[i]*2,embed_dims[i])
+                    )
+                    
+                    w = nn.Parameter(torch.zeros((1, 1, embed_dims[i])), requires_grad=True)
+
+                    norm = norm_layer(embed_dims[i])
+                    setattr(self, f"norm{i + 1}", norm)
+                    setattr(self, f"proj{i + 1}", proj)
+                    setattr(self, f"pw{i + 1}", w)
+                setattr(self, f"patch_embed{i + 1}", patch_embed)
+            cur += depths[i]
+
+            setattr(self, f"block{i + 1}", block)
+
+        self.cor = {}
+
+        self.apply(self._init_weights)
+
+    def _init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            trunc_normal_(m.weight, std=.02)
+            if isinstance(m, nn.Linear) and m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.LayerNorm):
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
+        elif isinstance(m, nn.Conv2d):
+            fan_out = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+            fan_out //= m.groups
+            m.weight.data.normal_(0, math.sqrt(2.0 / fan_out))
+            if m.bias is not None:
+                m.bias.data.zero_()
+
+    def get_cor(self, shape, device):
+        k = (str(shape), str(device))
+        if k not in self.cor:
+            tenHorizontal = torch.linspace(-1.0, 1.0, shape[2], device=device).view(
+                1, 1, 1, shape[2]).expand(shape[0], -1, shape[1], -1).permute(0, 2, 3, 1)
+            tenVertical = torch.linspace(-1.0, 1.0, shape[1], device=device).view(
+                1, 1, shape[1], 1).expand(shape[0], -1, -1, shape[2]).permute(0, 2, 3, 1)
+            self.cor[k] = torch.cat([tenHorizontal, tenVertical], -1).to(device)
+        return self.cor[k]
+
+    def forward(self, x1, x2):
+        B = x1.shape[0] 
+        x = torch.cat([x1, x2], 0)
+        motion_features = []
+        appearence_features = []
+        xs = []
+        for i in range(self.num_stages):
+            motion_features.append([])
+            patch_embed = getattr(self, f"patch_embed{i + 1}",None)
+            block = getattr(self, f"block{i + 1}",None)
+            norm = getattr(self, f"norm{i + 1}",None)
+            proj = getattr(self, f"proj{i + 1}",None)
+            w = getattr(self, f"pw{i + 1}",None)
+            if i < self.conv_stages:
+                if i > 0:
+                    x = patch_embed(x)
+                x = block(x)
+                xs.append(x)
+            else:
+                if i == self.conv_stages:
+                    x, H, W = patch_embed(xs)
+                else:
+                    x, H, W = patch_embed(x)
+                cor = self.get_cor((x.shape[0], H, W), x.device)
+                feature_fusion = []
+                for blk in block:
+                    x, x_motion = blk(x, cor, H, W, B)
+                    feature_fusion.append(x)
+                    motion_features[i].append(x_motion.reshape(2*B, H, W, -1).permute(0, 3, 1, 2).contiguous())
+                x = w*proj(feature_fusion[0]) + (1-w)*feature_fusion[1]
                 x = norm(x)
                 x = x.reshape(2*B, H, W, -1).permute(0, 3, 1, 2).contiguous()
                 motion_features[i] = torch.cat(motion_features[i], 1)
