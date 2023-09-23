@@ -48,8 +48,8 @@ Based on baseline_lap_char.py, add ternary loss and perceptual loss,
 class Total_Loss(nn.Module):
     def __init__(self,) -> None:
         super().__init__()
-        self.loss = nn.ModuleList([Charbonnier_Loss(), LapLoss(), Ternary(device)])
-        self.weight = [1., 0.5, 0.1]
+        self.loss = nn.ModuleList([Charbonnier_Loss(), LapLoss()])
+        self.weight = [1., 0.5]
     
     def forward(self,pred, gt):
         loss = 0

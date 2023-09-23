@@ -22,7 +22,7 @@ class FullModel(nn.Module):
         flow, feature = self.backone(x)
         img0 = x[:, :3].contiguous()
         img1 = x[:, 3:6].contiguous()
-        if timestamp == 0.5:
+        if not isinstance(timestamp,torch.Tensor):
             timestamp = torch.Tensor([timestamp]).to(x)
         B = timestamp.shape[0]
         timestamp = timestamp.reshape(B,1,1,1)

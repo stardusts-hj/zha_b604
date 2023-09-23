@@ -52,7 +52,8 @@ def train(model, local_rank, batch_size, data_path, log_dir):
     ave_loss = 0
     for epoch in range(args.epoch):
         sampler.set_epoch(epoch)
-        # evaluate(model, val_data, nr_eval, local_rank)
+        # if local_rank == 0:
+        #     evaluate(model, val_data, nr_eval, writer, logger)
         for i, (imgs,emb_t)  in enumerate(train_data):
             imgs = imgs.to(device, non_blocking=True) / 255.
             imgs, gt = imgs[:, 0:6], imgs[:, 6:]
@@ -103,7 +104,7 @@ if __name__ == "__main__":
     parser.add_argument('--world_size', type=int, default=4, help='world size')
     parser.add_argument('--batch_size', type=int, default=8, help='batch size')
     parser.add_argument('--data_path', type=str, default='/data1/dataset/NeurIPS_CellSegData/vimeo90k/', help='data path of vimeo90k')
-    parser.add_argument('--config', type=str, default='baseline_lap_char', help='path of configs')
+    parser.add_argument('--config', type=str, default='tune', help='path of configs')
     args = parser.parse_args()
     torch.distributed.init_process_group(backend="nccl", world_size=args.world_size)
     rank, world_size = torch.distributed.get_rank(), torch.distributed.get_world_size()
@@ -119,7 +120,7 @@ if __name__ == "__main__":
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.benchmark = True
     
-    log_dir = 'debug/output_lap_char'
+    log_dir = 'output_tune'
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
     format_str = '%(asctime)s %(levelname)s: %(message)s'

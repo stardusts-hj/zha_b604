@@ -57,24 +57,32 @@ class VimeoDatasetArbi(Dataset):
 #         return img0, gt, img1
     
     def getimg_arbi(self, index):
-        imgpath = os.path.join(self.image_root, self.meta_data[index])
-        filename = os.listdir(imgpath)
-        filename.sort()
-        shuffle(self.order)
-        order  = self.order[0:3]
-        order.sort()
-        imgpaths = [ imgpath + '/' + filename[order[0]], imgpath + '/' + filename[order[1]], imgpath + '/' + filename[order[2]] ]
-        
-        img0 = cv2.imread(imgpaths[0])
-        gt = cv2.imread(imgpaths[1])
-        img1 = cv2.imread(imgpaths[2])
-        timestep = (order[1] - order[0]) * 1.0 / (order[2] - order[0])
-        
+        if 'train' in self.dataset_name:
+            imgpath = os.path.join(self.image_root, self.meta_data[index])
+            filename = os.listdir(imgpath)
+            filename.sort()
+            shuffle(self.order)
+            order  = self.order[0:3]
+            order.sort()
+            imgpaths = [ imgpath + '/' + filename[order[0]], imgpath + '/' + filename[order[1]], imgpath + '/' + filename[order[2]] ]
+            
+            img0 = cv2.imread(imgpaths[0])
+            gt = cv2.imread(imgpaths[1])
+            img1 = cv2.imread(imgpaths[2])
+            timestep = (order[1] - order[0]) * 1.0 / (order[2] - order[0])
+        elif 'test' in self.dataset_name:
+            imgpath = os.path.join(self.image_root, self.meta_data[index])
+            filename = sorted(os.listdir(imgpath))
+            order = (index % 5) + 1
+            img0 = cv2.imread(os.path.join(imgpath, filename[0]))
+            gt = cv2.imread(os.path.join(imgpath, filename[order]))
+            img1 = cv2.imread(os.path.join(imgpath, filename[-1]))
+            timestep = (order - 0) * 1.0 / (6 - 0)
         return img0,gt,img1,timestep
     
     def __getitem__(self, index):        
         img0, gt, img1, timestep = self.getimg_arbi(index)
-                
+
         if 'train' in self.dataset_name:
             img0, gt, img1 = self.aug(img0, gt, img1, 256, 256)
             if random.uniform(0, 1) < 0.5:
