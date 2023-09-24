@@ -87,14 +87,16 @@ class EMA_Unet(nn.Module):
 ############################## NAFNet Unet Refine #################################
 
 class NAF_Unet(nn.Module):
-    def __init__(self, in_channel=3, width=16, middle_blk_num=1, enc_blk_nums=[], dec_blk_nums=[], dw = True):
+    def __init__(self, in_channel=3, width=16, middle_blk_num=1, enc_blk_nums=[], dec_blk_nums=[], dw = False):
         super().__init__()
         self.intro = conv(in_channel,width,3,1,1, dw=dw)
-        self.ending = nn.Sequential(
-            nn.Conv2d(width, width, 3 , 1 ,1, groups=width),
-            nn.Conv2d(width, 3, 1, 1)
-            )
-        # self.ending = nn.Conv2d(width,3,3,1,1)
+        if dw:
+            self.ending = nn.Sequential(
+                nn.Conv2d(width, width, 3 , 1 ,1, groups=width),
+                nn.Conv2d(width, 3, 1, 1)
+                )
+        else:
+            self.ending = nn.Conv2d(width,3,3,1,1)
         self.encoders = nn.ModuleList()
         self.decoders = nn.ModuleList()
         self.middle_blks = nn.ModuleList()

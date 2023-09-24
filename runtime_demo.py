@@ -20,7 +20,7 @@ parser.add_argument("--save-dir", type=str, default="log")
 # specify test case
 parser.add_argument("--repeat", type=int, default=20)
 parser.add_argument("--batch-size", type=int, default=1)
-parser.add_argument("--model", type=str, default="baseline_more_loss")
+parser.add_argument("--model", type=str, default="baseline_lap_char")
 
 
 parser.add_argument('--n', default=10, type=int)

@@ -13,7 +13,7 @@ import importlib
 from model.Full_Model import FullModel
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--model", type=str, default="baseline_moreloss")
+parser.add_argument("--model", type=str, default="baseline_more_loss")
 args = parser.parse_args()
 
 torch.cuda.current_device()

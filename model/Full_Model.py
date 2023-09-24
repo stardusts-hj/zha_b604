@@ -41,6 +41,7 @@ class FullModel(nn.Module):
         extra_info['warped_img1'] = warped_img1
         extra_info['init_pred'] = init_pred
         extra_info['res'] = res
+        extra_info['flow'] = flow
 
 
 

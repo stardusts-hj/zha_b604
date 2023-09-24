@@ -100,14 +100,14 @@ class BFAT_backbone(nn.Module):
 ############################ EMA-VFI backbone ############################
 
 class Head(nn.Module):
-    def __init__(self, in_planes, scale, c, in_else=17,fc=32):
+    def __init__(self, in_planes, scale, c, in_else=17,fc=32, dw=False):
         super(Head, self).__init__()
         self.upsample = nn.Sequential(nn.PixelShuffle(2), nn.PixelShuffle(2))
         self.scale = scale
         self.conv = nn.Sequential(
-                                  conv(in_planes*2 // (4*4) + in_else, c, dw=True),
-                                  conv(c, c, dw=True),
-                                  conv(c, 4+fc, dw=True),
+                                  conv(in_planes*2 // (4*4) + in_else, c, dw=dw),
+                                  conv(c, c, dw=dw),
+                                  conv(c, 4+fc, dw=dw),
                                   )
 
     def forward(self, motion_feature, x, flow): # /16 /8 /4
@@ -137,7 +137,7 @@ class EMA_Backbone(nn.Module):
                             kargs['scales'][-1-i], 
                             kargs['hidden_dims'][-1-i],
                             6 if i==0 else 3*4+4+kargs['fc'],
-                            kargs['fc']) 
+                            kargs['fc'], dw=kargs['dw']) 
                             for i in range(self.flow_num_stage)])
         
     def forward(self, x):
