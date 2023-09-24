@@ -9,3 +9,6 @@ benckmark/*
 output*
 submit
 *.png
+*.jpg
+.vscode
+*.pkl
