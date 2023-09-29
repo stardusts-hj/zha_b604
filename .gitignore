@@ -12,3 +12,4 @@ submit
 *.jpg
 .vscode
 *.pkl
+bad_validation**

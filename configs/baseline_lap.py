@@ -18,7 +18,8 @@ def init_backbone_model_config(F=32, W=9, depth=[2, 2, 4, 4, 4]):
         'mlp_ratios':[4, 4],
         'qkv_bias':True,
         'norm_layer':partial(nn.LayerNorm, eps=1e-6), 
-        'fc': 32
+        'fc': 32,
+        'dw': False
     }
 
 
@@ -30,7 +31,8 @@ def init_refine_model_config():
         'width': 16,
         'enc_blk_nums': [1] * 3,
         'dec_blk_nums': [1] * 3,
-        'middle_blk_num': 1
+        'middle_blk_num': 1,
+        'dw':False
     }
 
 MODEL_CONFIG = {
