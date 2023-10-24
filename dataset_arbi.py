@@ -33,7 +33,7 @@ class VimeoDatasetArbi(Dataset):
         self.w = 448
         self.data_root = path
         self.order = list(range(7))
-        self.image_root = os.path.join(self.data_root, 'official')
+        self.image_root = os.path.join(self.data_root)
         self.sub_path = [f'sub_{i}' for i in range(7)]
         train_fn = os.path.join('trainlist.txt')
         test_fn = os.path.join('testlist.txt')

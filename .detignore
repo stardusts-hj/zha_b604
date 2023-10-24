@@ -13,3 +13,5 @@ submit
 .vscode
 *.pkl
 bad_validation**
+test
+*validation*
