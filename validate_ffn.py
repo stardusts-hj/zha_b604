@@ -32,7 +32,7 @@ model = FastFlowNet().cuda()
 model = model.eval()
 model.load_state_dict(torch.load('./fastflownet_ft_sintel.pth'))
 
-dataset_val = VimeoDatasetArbi('test', r'F:\vfi\train\sequence')
+dataset_val = VimeoDatasetArbi('test', r'K:\data')
 val_data = DataLoader(dataset_val, batch_size=8, pin_memory=True, num_workers=0)
 
 def evaluate(model, val_data):
@@ -49,8 +49,8 @@ def evaluate(model, val_data):
             flow_forward = 20.0 * F.interpolate(flow_forward, size=(h, w), mode='bilinear', align_corners=False)
             flow_backward = model(torch.cat([img2, img1], 1)).data
             flow_backward = 20.0 * F.interpolate(flow_backward, size=(h, w), mode='bilinear', align_corners=False)
-            warp0 = warp(img1, flow_backward*emb_t)
-            warp1 = warp(img2, flow_forward*(1 - emb_t))
+            warp0 = warp(img1, flow_backward*emb_t**2 - flow_forward*emb_t*(1 - emb_t))
+            warp1 = warp(img2, flow_forward*(1 - emb_t)**2 - flow_backward*emb_t*(1 - emb_t))
             pred = warp0 * ( 1 - emb_t ) + warp1 * emb_t
             # pred, _ = model.update(imgs, gt, training=False, emb_t = emb_t)
         for j in range(gt.shape[0]):

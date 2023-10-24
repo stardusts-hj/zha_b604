@@ -1,8 +1,11 @@
-x = 1
-
-def foo():
-    print(x)
+import numpy as np
+import matplotlib.pyplot as plt
 
 
+data = np.load('diff_xvfi.npy')
 
-foo()
+plt.scatter(data[:,0], data[:,1])
+plt.xlabel("mse_loss")
+plt.ylabel("psnr")
+plt.show()
+print(data.shape)

@@ -1,9 +1,9 @@
 from functools import partial
 import torch.nn as nn
-from model.loss import LapLoss
+from model.loss import LapLoss, Charbonnier_Loss, Smoothloss
 
 '''==========Model config=========='''
-def init_backbone_model_config(F=32, W=9, depth=[2, 2, 4, 4, 4]):
+def init_backbone_model_config(F=16, W=9, depth=[2, 2, 2, 4, 4]):
     '''This function should not be modified'''
     return { 
         'type': 'EMA_Backbone',
@@ -19,7 +19,7 @@ def init_backbone_model_config(F=32, W=9, depth=[2, 2, 4, 4, 4]):
         'qkv_bias':True,
         'norm_layer':partial(nn.LayerNorm, eps=1e-6), 
         'fc': 32,
-        'dw': False
+        'dw': True
     }
 
 
@@ -32,25 +32,33 @@ def init_refine_model_config():
         'enc_blk_nums': [1] * 3,
         'dec_blk_nums': [1] * 3,
         'middle_blk_num': 1,
-        'dw':False
+        'dw': True
     }
 
 MODEL_CONFIG = {
     'LOGNAME': 'debug',
-    'backbone': init_backbone_model_config(F = 16,
-        depth = [2, 2, 2, 2, 2]),
-    'refine':   init_refine_model_config()
+    'pad':True,
+    'backbone': init_backbone_model_config(),
+    'refine':   init_refine_model_config(),
+    'linear_blend': True
 }
 
 class Total_Loss(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.loss = [LapLoss()]
-        self.weight = [1.]
+        self.loss = [Charbonnier_Loss(), LapLoss()]
+        self.weight = [1., 0.5]
+        self.char_loss = Charbonnier_Loss()
+        self.smooth_loss = Smoothloss()
     
-    def forward(self,img0, img1):
+    def forward(self,pred, gt, extra_info=None, imgs = None):
         loss = 0
         for l, w in zip(self.loss, self.weight):
-            loss = loss + l(img0, img1) * w
+            loss = loss + l(pred, gt) * w
+        loss = loss + \
+            self.char_loss(extra_info['warped_r_to_l'], imgs[:,:3]) * 0.2 + \
+            self.char_loss(extra_info['warped_l_to_r'], imgs[:,3:6]) * 0.2 + \
+            self.char_loss(extra_info['warped_img0'], extra_info['warped_img1']) * 0.2 + \
+            self.smooth_loss(extra_info['flow']) * 0.01
             
         return loss

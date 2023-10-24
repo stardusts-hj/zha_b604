@@ -21,24 +21,23 @@ def init_backbone_model_config(F=16, W=9, depth=[2, 2, 2, 4, 4]):
         'norm_layer':partial(nn.LayerNorm, eps=1e-6), 
         'fc': 32,
         'dw': True,
-        'rep': False
     }
 
 
 def init_refine_model_config():
     '''This function should not be modified'''
     return {
-        'type': 'NAF_Unet',
-        'in_channel': 32+15+4,
-        'width': 16,
-        'enc_blk_nums': [1] * 3,
-        'dec_blk_nums': [1] * 3,
-        'middle_blk_num': 1,
-        'dw': True
+        'type': 'Stage_Refine',
+        'in_channel': 32+15+4+2,
+        'width': 48,
+        'dw': False,
+        'rep':True
     }
 
 MODEL_CONFIG = {
     'LOGNAME': 'debug',
+    'linear_blend': True,
+    'refine_5': True,
     'backbone': init_backbone_model_config(),
     'refine':   init_refine_model_config(),
 }
@@ -53,12 +52,14 @@ class Total_Loss(nn.Module):
         super().__init__()
         self.loss = nn.ModuleList([Charbonnier_Loss(), LapLoss()])
         self.weight = [1., 0.5]
+        self.char_loss = Charbonnier_Loss()
     
-    def forward(self,pred, gt):
+    def forward(self,pred, gt, extra_info=None, imgs = None):
         loss = 0
         for l, w in zip(self.loss, self.weight):
             loss = loss + l(pred, gt) * w
-            
+        loss = loss + \
+            self.char_loss(extra_info['warped_r_to_l'], imgs[:,:3]) * 0.2 + \
+            self.char_loss(extra_info['warped_l_to_r'], imgs[:,3:6]) * 0.2
         return loss
 
-    

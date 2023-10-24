@@ -2,6 +2,9 @@ import torch
 import torch.nn as nn
 import math
 from timm.models.layers import trunc_normal_
+from model.BackBone import Head
+import torch.nn.functional as F
+from model.RRRB import RRRB
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -87,7 +90,7 @@ class EMA_Unet(nn.Module):
 ############################## NAFNet Unet Refine #################################
 
 class NAF_Unet(nn.Module):
-    def __init__(self, in_channel=3, width=16, middle_blk_num=1, enc_blk_nums=[], dec_blk_nums=[], dw = False):
+    def __init__(self, in_channel=3, width=16, middle_blk_num=1, enc_blk_nums=[], dec_blk_nums=[], dw = True):
         super().__init__()
         self.intro = conv(in_channel,width,3,1,1, dw=dw)
         if dw:
@@ -151,7 +154,7 @@ class NAF_Unet(nn.Module):
             if m.bias is not None:
                 m.bias.data.zero_()
         
-    def forward(self, inp):
+    def forward(self, inp, time=None):
 
         x = self.intro(inp)
 
@@ -172,5 +175,83 @@ class NAF_Unet(nn.Module):
         ## Note: must use sigmoid as act
         x = self.ending(x)
         x = torch.sigmoid(x)
+
+        return x
+
+############################## NAFNet Unet_v2 Refine #################################
+
+
+class IFBlock(nn.Module):
+    def __init__(self, in_planes, c=64, dw=False, rep= False):
+        super(IFBlock, self).__init__()
+        self.conv0 = nn.Sequential(
+            conv(in_planes, c//2, 3, 2, 1, dw=dw),
+            conv(c//2, c, 3, 2, 1, dw=dw),
+            )
+        if rep:
+            self.convblock = nn.Sequential(
+                RRRB(c),
+                RRRB(c),
+                RRRB(c),
+                RRRB(c),
+                RRRB(c),
+                RRRB(c),
+                RRRB(c),
+                RRRB(c),
+            )
+        else :
+            self.convblock = nn.Sequential(
+                conv(c, c, dw=dw),
+                conv(c, c, dw=dw),
+                conv(c, c, dw=dw),
+                conv(c, c, dw=dw),
+                conv(c, c, dw=dw),
+                conv(c, c, dw=dw),
+                conv(c, c, dw=dw),
+                conv(c, c, dw=dw),
+            )
+        self.lastconv = nn.ConvTranspose2d(c, 5, 4, 2, 1)
+
+    def forward(self, x, flow=None, scale=2):
+        if scale != 1:
+            x = F.interpolate(x, scale_factor = 1. / scale, mode="bilinear", align_corners=False)
+        if flow != None:
+            flow = F.interpolate(flow, scale_factor = 1. / scale, mode="bilinear", align_corners=False) * 1. / scale
+            x = torch.cat((x, flow), 1)
+        x = self.conv0(x)
+        x = self.convblock(x) + x
+        tmp = self.lastconv(x)
+        tmp = F.interpolate(tmp, scale_factor = scale * 2, mode="bilinear", align_corners=False)
+        flow = tmp[:, :4] * scale * 2
+        mask = tmp[:, 4:5]
+        return flow, mask
+
+
+
+class Stage_Refine(nn.Module):
+    def __init__(self, in_channel=3, width=16, dw = True, rep=False):
+        super().__init__()
+        self.block1 = IFBlock(in_planes=in_channel, c=width, dw=dw, rep=rep)
+        
+
+    def _init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            trunc_normal_(m.weight, std=.02)
+            if isinstance(m, nn.Linear) and m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.LayerNorm):
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
+        elif isinstance(m, nn.Conv2d):
+            fan_out = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+            fan_out //= m.groups
+            m.weight.data.normal_(0, math.sqrt(2.0 / fan_out))
+            if m.bias is not None:
+                m.bias.data.zero_()
+        
+    def forward(self, inp, time=None):
+
+        B, C, H, W = inp.shape
+        x = self.block1(torch.cat([inp, time.repeat(1,1,H,W), (1 - time).repeat(1,1,H,W)], 1), None)
 
         return x

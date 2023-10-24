@@ -12,7 +12,7 @@ import sys
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--model-name", type=str, default="baseline")
+parser.add_argument("--model-name", type=str, default="final_stage0")
 
 # specify dirs
 parser.add_argument("--save-dir", type=str, default="log")
@@ -20,10 +20,10 @@ parser.add_argument("--save-dir", type=str, default="log")
 # specify test case
 parser.add_argument("--repeat", type=int, default=20)
 parser.add_argument("--batch-size", type=int, default=1)
-parser.add_argument("--model", type=str, default="baseline_lap_char")
+parser.add_argument("--model", type=str, default="reproduce")
 
 
-parser.add_argument('--n', default=10, type=int)
+parser.add_argument('--n', default=2, type=int)
 args = parser.parse_args()
 
 
@@ -83,7 +83,7 @@ end = torch.cuda.Event(enable_timing=True)
 """
 TESTING
 """  
-size = (3, 1920, 1080)
+size = (3, 1080, 1920)
 I0_ = (torch.randn(*size).cuda() / 255.).unsqueeze(0)
 I2_ = (torch.randn(*size).cuda() / 255.).unsqueeze(0)
 # input_data = torch.randn((1, 3, args.crop_size[0], args.crop_size[1])).to(device)

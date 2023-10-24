@@ -13,4 +13,3 @@ submit
 .vscode
 *.pkl
 bad_validation**
-*.gif

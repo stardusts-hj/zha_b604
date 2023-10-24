@@ -54,10 +54,13 @@ class LapLoss(torch.nn.Module):
         self.max_levels = max_levels
         self.gauss_kernel = gauss_kernel(channels=channels)
         
-    def forward(self, input, target):
+    def forward(self, input, target, mask=None):
         pyr_input  = laplacian_pyramid(img=input, kernel=self.gauss_kernel, max_levels=self.max_levels)
         pyr_target = laplacian_pyramid(img=target, kernel=self.gauss_kernel, max_levels=self.max_levels)
-        return sum(torch.nn.functional.l1_loss(a, b) for a, b in zip(pyr_input, pyr_target))
+        if mask is None:
+            return sum(torch.nn.functional.l1_loss(a, b) for a, b in zip(pyr_input, pyr_target))
+        else:
+            return sum((torch.nn.functional.l1_loss(a, b, reduction='none') * mask).mean() for a, b in zip(pyr_input, pyr_target))
 
 class Ternary(nn.Module):
     def __init__(self, device):
@@ -104,7 +107,7 @@ class Charbonnier_Loss(nn.Module):
         if mask is None:
             loss = (((img0 - img1) ** 2 + 1e-6) ** 0.5).mean()
         else:
-            loss = ((((img0 - img1) ** 2 + 1e-6) ** 0.5) * mask).mean() / (mask.mean() + 1e-9)
+            loss = ((((img0 - img1) ** 2 + 1e-6) ** 0.5) * mask).mean()
         return loss
     
 
@@ -202,6 +205,16 @@ class PerceptualLoss(nn.Module):
             loss += self.lossfn(x_vgg, gt_vgg.detach())
         return loss
 
+class Smoothloss(nn.Module):
+    def __init__(self):
+        super(Smoothloss, self).__init__()
+        self.l1 = nn.L1Loss(reduce='mean')
+    def forward(self, flow):
+        fw = flow[:, :2, :, :]
+        bw = flow[:, 2:4, :, :]
+        smooth_fwd = self.l1(fw[:,:,:,:-1], fw[:,:,:,1:]) + self.l1(fw[:,:,:-1,:], fw[:,:,1:,:])
+        smooth_bwd = self.l1(bw[:,:,:,:-1], bw[:,:,:,1:]) + self.l1(bw[:,:,:-1,:], bw[:,:,1:,:])
+        return smooth_fwd + smooth_bwd
 
 if __name__== '__main__':
     x = torch.randn(1,3,256,256).cuda()

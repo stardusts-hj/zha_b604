@@ -15,34 +15,33 @@ from torch.utils.data import DataLoader
 import numpy as np
 from model.warplayer import warp
 import cv2 as cv
-import torch.nn.functional as F
-from imageio import mimsave
 from torchvision.utils import flow_to_image
 from benchmark.utils.padder import InputPadder
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--model", type=str, default="baseline_lap_char")
 parser.add_argument('--test_data_path', type=str, default='test')
 parser.add_argument('--dataset', type=str, default='X4K1000FPS')
 parser.add_argument('--img_ch', type=int, default=3, help='base number of channels for image')
 args = parser.parse_args()
-padder = InputPadder((1080, 1920), divisor=32)
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-####   FFN   ####
-from ffn.fastflownet import FastFlowNet, centralize
-# from torchvision.models.optical_flow import Raft_Small_Weights
+####   RAFT   ####
+from torchvision.models.optical_flow import raft_large
+from torchvision.models.optical_flow import Raft_Large_Weights
+from imageio import mimsave
 
-
-model = FastFlowNet().cuda()
+weights = Raft_Large_Weights.DEFAULT
+model = raft_large(weights=weights, progress=False).to(device)
 model = model.eval()
-model.load_state_dict(torch.load('./fastflownet_ft_sintel.pth'))
 
-# dataset_val = VimeoDatasetArbi('test', '/data1/dataset/NeurIPS_CellSegData/vimeo90k/')
-# val_data = DataLoader(dataset_val, batch_size=8, pin_memory=True, num_workers=4)
+# dataset_val = VimeoDatasetArbi('test', r'F:\vfi\train\sequence')
+# val_data = DataLoader(dataset_val, batch_size=8, pin_memory=True, num_workers=0)
 
 from xvfi_utils import X_Test
 test_set = X_Test(args, multiple=8, validation=False)
-val_data = DataLoader(test_set, batch_size=2, pin_memory=True, num_workers=0, drop_last=True)
+val_data = DataLoader(test_set, batch_size=1, pin_memory=True, num_workers=0, drop_last=True)
 
 def process(imgs):
     result = []
@@ -51,28 +50,27 @@ def process(imgs):
         result.append(im.astype(np.uint8))
     
     return result
-idx = 0
+
+
+padder = InputPadder((1080, 1920), divisor=32)
 def evaluate(model, val_data):
 
     psnr = []
-    global idx
     for i, (frames, t_value, scene_name, frameRange) in enumerate(val_data):
-        # imgs = F.interpolate(imgs, (1088, 1920))
         b, _, _, _ = frames.shape
         imgs = frames
         emb_t = t_value.reshape(b,1,1,1)
         emb_t = emb_t.to(device)
         imgs = imgs.to(device, non_blocking=True)
         img1, img2, gt = imgs[:, :3], imgs[:, 3:6],  imgs[:, 6:]
-        img1, img2, rgb_mean = centralize(img1, img2)
-        h, w = img1.shape[2:]
+        rgb_mean = (img1.mean(dim=[-1,-2]) + img1.mean(dim=[-1,-2])) / 2
+        rgb_mean = rgb_mean.reshape(b, 3,1,1)
         with torch.no_grad():
-            flow_forward = model(torch.cat([img1, img2], 1)).data
-            flow_forward = 20.0 * F.interpolate(flow_forward, size=(h, w), mode='bilinear', align_corners=False)
-            flow_backward = model(torch.cat([img2, img1], 1)).data
-            flow_backward = 20.0 * F.interpolate(flow_backward, size=(h, w), mode='bilinear', align_corners=False)
-            # warp0 = warp(img1, flow_backward*emb_t)
-            # warp1 = warp(img2, flow_forward*(1 - emb_t))
+            flow_forward = model(img1, img2)[-1]
+            flow_backward = model(img2, img1)[-1]
+            warp0 = warp(img1, flow_backward*emb_t)
+            warp1 = warp(img2, flow_forward*(1 - emb_t))
+            pred = warp0 * ( 1 - emb_t ) + warp1 * emb_t
             warped_l_to_r = warp(img1, flow_backward)
             warped_r_to_l = warp(img2, flow_forward)
             warp0 = warp(img1, flow_backward*emb_t**2 - flow_forward*emb_t*(1 - emb_t))
@@ -90,7 +88,7 @@ def evaluate(model, val_data):
             i1, i2, gtt, predd, w0, w1= process([imgs[j, 0:3], imgs[j,3:6], gt[j], pred[j], warped_l_to_r[j], warped_r_to_l[j]])
             # overlap = (gtt.astype(np.float32) + predd.astype(np.float32)) / 2.
             t = float(emb_t[j].detach().cpu())
-            base_path = os.path.join('validation_ffn', f'{i}_{cri:.4f}')
+            base_path = os.path.join('validation_raft', f'{i}_{cri:.4f}')
             if not os.path.exists(base_path):
                os.makedirs(base_path)
             cv.imwrite(os.path.join(base_path, 'left.png'), i1)
@@ -112,11 +110,6 @@ def evaluate(model, val_data):
             f2 = flow_to_image(f2)
             im = padder.unpad(f2)[0].detach().cpu().numpy().transpose(1, 2, 0)
             cv.imwrite(os.path.join(base_path, f'flopw_backward.png'), im.astype(np.uint8))
-                
-            idx += 1
-            psnr.append(cri)
-            # tmp = pred[j].detach().cpu().numpy().transpose(1,2,0)*255.
-            # cv.imwrite('tmp.png', tmp.astype(np.uint8))
 
     # print(psnr)
     # print(len(psnr))

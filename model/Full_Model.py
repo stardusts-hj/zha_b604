@@ -53,12 +53,16 @@ class FullModel(nn.Module):
             mask = torch.sigmoid(mask)
             interp_img = out_0 * mask + out_1 * (1 - mask)
             interp_img = torch.clamp(interp_img, 0, 1)
+            extra_info['res_flow'] = out[:, :4]
+            extra_info['t_flow'] = torch.cat([out[:, :2]+flow[:, :2]*timestamp**2 - flow[:,2:4]*timestamp*(1-timestamp),
+                                              out[:, 2:4]+flow[:, 2:4]*(1 - timestamp)**2 - flow[:,:2]*timestamp*(1-timestamp)],1)
         extra_info['warped_img0'] = warped_img0
         extra_info['warped_img1'] = warped_img1
         extra_info['init_pred'] = init_pred
         extra_info['pred'] = interp_img
         extra_info['warped_l_to_r'] = warped_l_to_r
         extra_info['warped_r_to_l'] = warped_r_to_l
+        extra_info['flow'] = flow
 
 
 
@@ -76,21 +80,25 @@ class FullModel(nn.Module):
             timestamp = torch.Tensor([timestamp]).to(x)
         B = timestamp.shape[0]
         timestamp = timestamp.reshape(B,1,1,1).to(x)
-        warped_img0 = warp(img0, flow[:, :2] * timestamp)
-        warped_img1 = warp(img1, flow[:, 2:4] * (1 - timestamp))
+        if self.linear_blend:
+            warped_img0 = warp(img0, flow[:, :2]*timestamp**2 - flow[:,2:4]*timestamp*(1-timestamp))
+            warped_img1 = warp(img1, flow[:, 2:4]*(1 - timestamp)**2 - flow[:,:2]*timestamp*(1-timestamp))
+        else:
+            warped_img0 = warp(img0, flow[:, :2] * timestamp)
+            warped_img1 = warp(img1, flow[:, 2:4] * (1 - timestamp))
 
         init_pred = warped_img0 * (1 - timestamp) + warped_img1 * (timestamp)
 
         if not self.refine_5:
-    
+
             res_out = self.refine(torch.cat([flow, feature, img0, img1, warped_img0, warped_img1, init_pred], dim=1), time = timestamp)
             ### follow the implementation of EMA-VFI and RIFE
             res = res_out[:, :3] * 2 - 1
             interp_img = torch.clamp(res + init_pred, 0, 1)
         else:
             out, mask = self.refine(torch.cat([flow, feature, img0, img1, warped_img0, warped_img1, init_pred], dim=1), time = timestamp)
-            out_0 = warp(img0, out[:, :2])
-            out_1 = warp(img1, out[:, 2:4])
+            out_0 = warp(img0, out[:, :2]+flow[:, :2]*timestamp**2 - flow[:,2:4]*timestamp*(1-timestamp))
+            out_1 = warp(img1, out[:, 2:4]+flow[:, 2:4]*(1 - timestamp)**2 - flow[:,:2]*timestamp*(1-timestamp))
             mask = torch.sigmoid(mask)
             interp_img = out_0 * mask + out_1 * (1 - mask)
             interp_img = torch.clamp(interp_img, 0, 1)

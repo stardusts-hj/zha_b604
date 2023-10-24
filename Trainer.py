@@ -41,10 +41,20 @@ class Model:
                 for k, v in param.items()
                 if "module." in k and 'attn_mask' not in k and 'HW' not in k
             }
-        if rank <= 0 :
+        def ddp_convert(param):
+            return {
+            k: v
+                for k, v in param.items()
+                if 'attn_mask' not in k and 'HW' not in k
+            }
+        if rank < 0 :
             if name is None:
                 name = self.name
             self.net.load_state_dict(convert(torch.load(name)))
+        else:
+            map_location = {'cuda:%d' % 0: 'cuda:%d' % rank}
+            self.net.load_state_dict(ddp_convert(torch.load(name, map_location=map_location)))
+            
     
     def save_model(self, name, rank=0):
         if rank == 0:
@@ -153,7 +163,7 @@ class Model:
 
         if training:
             pred, extra_info = self.net(imgs, timestamp=emb_t)
-            loss = self.cri(pred, gt)
+            loss = self.cri(pred, gt, extra_info=extra_info, imgs = imgs)
             # loss_l1 = (self.lap(pred, gt)).mean()
 
             # for merge in merged:
@@ -168,4 +178,4 @@ class Model:
         else: 
             with torch.no_grad():
                 pred, extra_info = self.net(imgs, timestamp=emb_t)
-                return pred, 0
+                return pred, extra_info
