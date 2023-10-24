@@ -56,6 +56,7 @@ def train(model, local_rank, batch_size, data_path, log_dir):
     ave_loss = 0
     if local_rank == 0:
         evaluate_xvfi(model, val_data, nr_eval, writer, logger)
+    dist.barrier()
     for epoch in range(args.epoch):
         sampler.set_epoch(epoch)
         # if local_rank == 0:
