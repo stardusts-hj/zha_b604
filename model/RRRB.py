@@ -44,13 +44,17 @@ class RRRB(nn.Module):
         ratio (int): Expand ratio.
     """
 
-    def __init__(self, n_feats, ratio=2, rep='plain'):
+    def __init__(self, n_feats, ratio=2, rep='plain', act=False):
         super(RRRB, self).__init__()
         self.expand_conv = nn.Conv2d(n_feats, ratio*n_feats, 1, 1, 0)
         if rep == 'plain' :
             self.fea_conv = nn.Conv2d(ratio*n_feats, ratio*n_feats, 3, 1, 0)
         # self.fea_conv = nn.Conv2d(ratio*n_feats, ratio*n_feats, 3, 1, 0)
         self.reduce_conv = nn.Conv2d(ratio*n_feats, n_feats, 1, 1, 0)
+        if act:
+            self.nonlinear = nn.PReLU(n_feats)
+        else:
+            self.nonlinear = nn.Identity()
 
     def forward(self, x):
         if hasattr(self, 'rrrb_reparam'):
@@ -65,7 +69,8 @@ class RRRB(nn.Module):
         out = self.fea_conv(out) + out_identity
         out = self.reduce_conv(out)
         out += x
-
+        out = self.nonlinear(out)
+        
         return out
 
     def switch_to_deploy(self):

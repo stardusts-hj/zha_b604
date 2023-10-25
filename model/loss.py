@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import numpy as np 
 import torch.nn.functional as F
-import lpips
 import torchvision.models as models
 import torchvision
 
@@ -208,13 +207,37 @@ class PerceptualLoss(nn.Module):
 class Smoothloss(nn.Module):
     def __init__(self):
         super(Smoothloss, self).__init__()
-        self.l1 = nn.L1Loss(reduce='mean')
-    def forward(self, flow):
+        self.l1 = nn.L1Loss(reduce='none')
+    def forward(self, flow, mask=None):
         fw = flow[:, :2, :, :]
         bw = flow[:, 2:4, :, :]
-        smooth_fwd = self.l1(fw[:,:,:,:-1], fw[:,:,:,1:]) + self.l1(fw[:,:,:-1,:], fw[:,:,1:,:])
-        smooth_bwd = self.l1(bw[:,:,:,:-1], bw[:,:,:,1:]) + self.l1(bw[:,:,:-1,:], bw[:,:,1:,:])
-        return smooth_fwd + smooth_bwd
+        if mask is None:
+            smooth_fwd = self.l1(fw[:,:,:,:-1], fw[:,:,:,1:]) + self.l1(fw[:,:,:-1,:], fw[:,:,1:,:])
+            smooth_bwd = self.l1(bw[:,:,:,:-1], bw[:,:,:,1:]) + self.l1(bw[:,:,:-1,:], bw[:,:,1:,:])
+        else:
+            smooth_fwd = self.l1(fw[:,:,:,:-1], fw[:,:,:,1:]) + self.l1(fw[:,:,:-1,:], fw[:,:,1:,:]) * mask
+            smooth_bwd = self.l1(bw[:,:,:,:-1], bw[:,:,:,1:]) + self.l1(bw[:,:,:-1,:], bw[:,:,1:,:]) * mask
+        return smooth_fwd.mean() + smooth_bwd.mean()
+
+class set_smoothness_loss(nn.Module):
+    def __init__(self, weight=150.0, edge_aware=True):
+        super(set_smoothness_loss, self).__init__()
+        self.edge_aware = edge_aware
+        self.weight = weight ** 2
+
+    def forward(self, flow, img):
+        img_gh = torch.mean(torch.pow((img[:, :, 1:, :] - img[:, :, :-1, :]), 2), dim=1, keepdims=True)
+        img_gw = torch.mean(torch.pow((img[:, :, :, 1:] - img[:, :, :, :-1]), 2), dim=1, keepdims=True)
+
+        weight_gh = torch.exp(-self.weight * img_gh)
+        weight_gw = torch.exp(-self.weight * img_gw)
+
+        flow_gh = torch.abs(flow[:, :, 1:, :] - flow[:, :, :-1, :])
+        flow_gw = torch.abs(flow[:, :, :, 1:] - flow[:, :, :, :-1])
+        if self.edge_aware:
+            return (torch.mean(weight_gh * flow_gh) + torch.mean(weight_gw * flow_gw)) * 0.5
+        else:
+            return (torch.mean(flow_gh) + torch.mean(flow_gw)) * 0.5
 
 if __name__== '__main__':
     x = torch.randn(1,3,256,256).cuda()
