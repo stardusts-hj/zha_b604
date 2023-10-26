@@ -207,7 +207,7 @@ class PerceptualLoss(nn.Module):
 class Smoothloss(nn.Module):
     def __init__(self):
         super(Smoothloss, self).__init__()
-        self.l1 = nn.L1Loss(reduce='none')
+        self.l1 = nn.L1Loss(reduction='none')
     def forward(self, flow, mask=None):
         fw = flow[:, :2, :, :]
         bw = flow[:, 2:4, :, :]
