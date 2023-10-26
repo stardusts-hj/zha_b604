@@ -14,3 +14,6 @@ submit
 *.pkl
 bad_validation**
 *.gif
+*.yaml
+*.npy
+run.sh

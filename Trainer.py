@@ -163,7 +163,7 @@ class Model:
 
         if training:
             pred, extra_info = self.net(imgs, timestamp=emb_t)
-            loss = self.cri(pred, gt, extra_info=extra_info, imgs = imgs)
+            loss, loss_dict = self.cri(pred, gt, extra_info=extra_info, imgs = imgs)
             # loss_l1 = (self.lap(pred, gt)).mean()
 
             # for merge in merged:
@@ -174,7 +174,7 @@ class Model:
             loss.backward()
             self.optimG.step()
             # return pred, loss_l1
-            return pred, loss
+            return pred, loss, loss_dict
         else: 
             with torch.no_grad():
                 pred, extra_info = self.net(imgs, timestamp=emb_t)

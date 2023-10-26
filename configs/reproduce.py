@@ -53,12 +53,19 @@ class Total_Loss(nn.Module):
     
     def forward(self,pred, gt, extra_info=None, imgs = None):
         loss = 0
+        loss_dict = {}
         for l, w in zip(self.loss, self.weight):
             loss = loss + l(pred, gt) * w
-        loss = loss + \
-            self.char_loss(extra_info['warped_r_to_l'], imgs[:,:3]) * 0.2 + \
-            self.char_loss(extra_info['warped_l_to_r'], imgs[:,3:6]) * 0.2 + \
-            self.char_loss(extra_info['warped_img0'], extra_info['warped_img1']) * 0.2 + \
-            self.smooth_loss(extra_info['flow']) * 0.01
+        loss_dict['init_pred_loss'] = loss.detach().cpu().item()
+        warped_r_to_l_loss = self.char_loss(extra_info['warped_r_to_l'], imgs[:,:3]) * 0.2
+        loss_dict['warped_r_to_l_loss'] = warped_r_to_l_loss.detach().cpu().item()
+        warped_l_to_r_loss = self.char_loss(extra_info['warped_l_to_r'], imgs[:,3:6]) * 0.2
+        loss_dict['warped_l_to_r_loss'] = warped_l_to_r_loss.detach().cpu().item()
+        warped_mid_loss = self.char_loss(extra_info['warped_img0'], extra_info['warped_img1']) * 0.2
+        loss_dict['warped_mid_loss'] = warped_mid_loss.detach().cpu().item()
+        reg_loss = self.smooth_loss(extra_info['flow']) * 0.01
+        loss_dict['reg_loss'] = reg_loss.detach().cpu().item()
+        
+        loss = loss + warped_r_to_l_loss + warped_l_to_r_loss + warped_mid_loss + reg_loss
             
-        return loss
+        return loss, loss_dict

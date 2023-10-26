@@ -65,11 +65,13 @@ def train(model, local_rank, batch_size, data_path, log_dir):
             imgs = imgs.to(device, non_blocking=True) / 255.
             imgs, gt = imgs[:, 0:6], imgs[:, 6:]
             learning_rate = get_learning_rate(step)
-            _, loss = model.update(imgs, gt, learning_rate, training=True, emb_t = emb_t)
+            _, loss, loss_dict = model.update(imgs, gt, learning_rate, training=True, emb_t = emb_t)
             ave_loss += loss.item()
             if step % 200 == 1 and local_rank == 0:
                 writer.add_scalar('train/learning_rate', learning_rate, step)
                 writer.add_scalar('train/loss', loss, step)
+                for k, v in loss_dict.item():
+                    writer.add_scalar(f'train/{k}', v, step)
             if step % 30 == 0 and local_rank == 0:
                 total_time = time.time() - start_time
                 time_sec_avg = total_time / (step - 0 + 1)
