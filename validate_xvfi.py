@@ -23,8 +23,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 model = Model(-1, args.model)
-# model.load_model('output_baselinev2/28000.pkl', -1)
-model.load_model('final_stage1_300.pkl', -1)
+ckpt = 'final_stage1_300.pkl'
+model.load_model(ckpt, -1)
 # model.load_model(f'output_tune_2_stage_refine/20.pkl', -1)
 model.eval()
 model.device()
@@ -66,7 +66,8 @@ def evaluate(model, val_data):
         with torch.no_grad():
             pred, extra_info = model.update(imgs, gt, training=False, emb_t = emb_t)
 
-        pred = extra_info['init_pred'] * (1 - extra_info['mask']) + pred * extra_info['mask']
+        # pred = extra_info['init_pred'] * (1 - extra_info['mask']) + pred * extra_info['mask']
+        pred = (pred + extra_info['init_pred']) / 2.
         for j in range(gt.shape[0]):
             cri = -10 * math.log10(((gt[j] - pred[j]) * (gt[j] - pred[j])).mean().cpu().item())
             init_cri = -10 * math.log10(((gt[j] - extra_info['init_pred'][j]) * (gt[j] - extra_info['init_pred'][j])).mean().cpu().item())

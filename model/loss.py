@@ -212,8 +212,8 @@ class Smoothloss(nn.Module):
         fw = flow[:, :2, :, :]
         bw = flow[:, 2:4, :, :]
         if mask is None:
-            smooth_fwd = self.l1(fw[:,:,:,:-1], fw[:,:,:,1:]) + self.l1(fw[:,:,:-1,:], fw[:,:,1:,:])
-            smooth_bwd = self.l1(bw[:,:,:,:-1], bw[:,:,:,1:]) + self.l1(bw[:,:,:-1,:], bw[:,:,1:,:])
+            smooth_fwd = self.l1(fw[:,:,:,:-1], fw[:,:,:,1:]).mean() + self.l1(fw[:,:,:-1,:], fw[:,:,1:,:]).mean()
+            smooth_bwd = self.l1(bw[:,:,:,:-1], bw[:,:,:,1:]).mean() + self.l1(bw[:,:,:-1,:], bw[:,:,1:,:]).mean()
         else:
             smooth_fwd = (self.l1(fw[:,:,:,:-1], fw[:,:,:,1:]) + self.l1(fw[:,:,:-1,:], fw[:,:,1:,:])) * mask
             smooth_bwd = (self.l1(bw[:,:,:,:-1], bw[:,:,:,1:]) + self.l1(bw[:,:,:-1,:], bw[:,:,1:,:])) * mask

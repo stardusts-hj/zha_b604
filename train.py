@@ -70,7 +70,7 @@ def train(model, local_rank, batch_size, data_path, log_dir):
             if step % 200 == 1 and local_rank == 0:
                 writer.add_scalar('train/learning_rate', learning_rate, step)
                 writer.add_scalar('train/loss', loss, step)
-                for k, v in loss_dict.item():
+                for k, v in loss_dict.items():
                     writer.add_scalar(f'train/{k}', v, step)
             if step % 30 == 0 and local_rank == 0:
                 total_time = time.time() - start_time
