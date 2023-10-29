@@ -21,8 +21,9 @@ args = parser.parse_args()
 
 '''==========Model setting=========='''
 
-model = Model(-1, 'final_stage0')
-model.load_model('final_stage1_300.pkl', -1)
+model = Model(-1, 'refine_twice')
+ckpt = 'refine_twice_240.pkl'
+model.load_model(ckpt, -1)
 # model = Model(-1, 'tune')
 # model.load_model('output_tune_fulldata/270.pkl', -1)
 model.eval()
@@ -50,7 +51,7 @@ with torch.no_grad():
 im = padder.unpad(pred[0])[0].detach().cpu().numpy().transpose(1, 2, 0)
 im = im * 255.
 images = [I0[:, :, ::-1], im[:, :, ::-1].astype(np.uint8), I2[:, :, ::-1]]
-mimsave('example/out.gif', images, duration=int(1/3*1000))
+mimsave(f'example/out_{ckpt}.gif', images, duration=int(1/3*1000))
 
 
 if not os.path.exists('results'):

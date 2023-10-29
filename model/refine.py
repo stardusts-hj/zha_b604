@@ -182,7 +182,7 @@ class NAF_Unet(nn.Module):
 
 
 class IFBlock(nn.Module):
-    def __init__(self, in_planes, c=64, dw=False, rep= False):
+    def __init__(self, in_planes, c=64, dw=False, rep= False, act=False):
         super(IFBlock, self).__init__()
         self.conv0 = nn.Sequential(
             conv(in_planes, c//2, 3, 2, 1, dw=dw),
@@ -190,14 +190,14 @@ class IFBlock(nn.Module):
             )
         if rep:
             self.convblock = nn.Sequential(
-                RRRB(c),
-                RRRB(c),
-                RRRB(c),
-                RRRB(c),
-                RRRB(c),
-                RRRB(c),
-                RRRB(c),
-                RRRB(c),
+                RRRB(c, act=act),
+                RRRB(c, act=act),
+                RRRB(c, act=act),
+                RRRB(c, act=act),
+                RRRB(c, act=act),
+                RRRB(c, act=act),
+                RRRB(c, act=act),
+                RRRB(c, act=act),
             )
         else :
             self.convblock = nn.Sequential(
@@ -232,6 +232,114 @@ class Stage_Refine(nn.Module):
     def __init__(self, in_channel=3, width=16, dw = True, rep=False):
         super().__init__()
         self.block1 = IFBlock(in_planes=in_channel, c=width, dw=dw, rep=rep)
+        
+
+    def _init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            trunc_normal_(m.weight, std=.02)
+            if isinstance(m, nn.Linear) and m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.LayerNorm):
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
+        elif isinstance(m, nn.Conv2d):
+            fan_out = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+            fan_out //= m.groups
+            m.weight.data.normal_(0, math.sqrt(2.0 / fan_out))
+            if m.bias is not None:
+                m.bias.data.zero_()
+        
+    def forward(self, inp, time=None):
+
+        B, C, H, W = inp.shape
+        x = self.block1(torch.cat([inp, time.repeat(1,1,H,W), (1 - time).repeat(1,1,H,W)], 1), None)
+
+        return x
+    
+
+
+class Stage_Refine_act(nn.Module):
+    def __init__(self, in_channel=3, width=16, dw = True, rep=False):
+        super().__init__()
+        self.block1 = IFBlock(in_planes=in_channel, c=width, dw=dw, rep=rep, act=True)
+        
+
+    def _init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            trunc_normal_(m.weight, std=.02)
+            if isinstance(m, nn.Linear) and m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.LayerNorm):
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
+        elif isinstance(m, nn.Conv2d):
+            fan_out = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+            fan_out //= m.groups
+            m.weight.data.normal_(0, math.sqrt(2.0 / fan_out))
+            if m.bias is not None:
+                m.bias.data.zero_()
+        
+    def forward(self, inp, time=None):
+
+        B, C, H, W = inp.shape
+        x = self.block1(torch.cat([inp, time.repeat(1,1,H,W), (1 - time).repeat(1,1,H,W)], 1), None)
+
+        return x
+
+###################   fine twice module   #####################
+
+
+class IFBlock_v2(nn.Module):
+    def __init__(self, in_planes, c=64, dw=False, rep= False, act=False):
+        super(IFBlock_v2, self).__init__()
+        self.conv0 = nn.Sequential(
+            conv(in_planes, c//2, 3, 2, 1, dw=dw),
+            conv(c//2, c, 3, 2, 1, dw=dw),
+            )
+        if rep:
+            self.convblock = nn.Sequential(
+                RRRB(c, act=act),
+                RRRB(c, act=act),
+                RRRB(c, act=act),
+                RRRB(c, act=act),
+                RRRB(c, act=act),
+                RRRB(c, act=act),
+                RRRB(c, act=act),
+                RRRB(c, act=act),
+            )
+        else :
+            self.convblock = nn.Sequential(
+                conv(c, c, dw=dw),
+                conv(c, c, dw=dw),
+                conv(c, c, dw=dw),
+                conv(c, c, dw=dw),
+                conv(c, c, dw=dw),
+                conv(c, c, dw=dw),
+                conv(c, c, dw=dw),
+                conv(c, c, dw=dw),
+            )
+        self.lastconv = nn.ConvTranspose2d(c, 6, 4, 2, 1)
+
+    def forward(self, x, flow=None, scale=2):
+        if scale != 1:
+            x = F.interpolate(x, scale_factor = 1. / scale, mode="bilinear", align_corners=False)
+        if flow != None:
+            flow = F.interpolate(flow, scale_factor = 1. / scale, mode="bilinear", align_corners=False) * 1. / scale
+            x = torch.cat((x, flow), 1)
+        x = self.conv0(x)
+        x = self.convblock(x) + x
+        tmp = self.lastconv(x)
+        tmp = F.interpolate(tmp, scale_factor = scale * 2, mode="bilinear", align_corners=False)
+        flow = tmp[:, :4] * scale * 2
+        mask = tmp[:, 4:5]
+        final_fuse_mask = tmp[:, 5:6]
+        return flow, mask, final_fuse_mask
+    
+    
+class Twice_Stage_Refine(nn.Module):
+    def __init__(self, in_channel=3, width=16, dw = True, rep=False):
+        super().__init__()
+        self.block1 = IFBlock_v2(in_planes=in_channel, c=width, dw=dw, rep=rep)
         
 
     def _init_weights(self, m):
