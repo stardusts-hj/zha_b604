@@ -8,20 +8,24 @@ from model.RRRB import RRRB
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def conv(in_planes, out_planes, kernel_size=3, stride=1, padding=1, dilation=1, dw = False, bias = True):
-    if dw:
-        return nn.Sequential(
-        nn.Conv2d(in_planes, in_planes, kernel_size=kernel_size, stride=stride, groups=in_planes,
-                  padding=padding, dilation=dilation, bias=bias),
-        nn.Conv2d(in_planes, out_planes, 1, 1),
-        nn.PReLU(out_planes)
-        )
-    else:
-        return nn.Sequential(
-            nn.Conv2d(in_planes, out_planes, kernel_size=kernel_size, stride=stride,
+def conv(in_planes, out_planes, kernel_size=3, stride=1, padding=1, dilation=1, dw = False, bias = True, rep='none'):
+    if rep == 'none':
+        if dw:
+            return nn.Sequential(
+            nn.Conv2d(in_planes, in_planes, kernel_size=kernel_size, stride=stride, groups=in_planes,
                     padding=padding, dilation=dilation, bias=bias),
+            nn.Conv2d(in_planes, out_planes, 1, 1),
             nn.PReLU(out_planes)
-        )
+            )
+        else:
+            return nn.Sequential(
+                nn.Conv2d(in_planes, out_planes, kernel_size=kernel_size, stride=stride,
+                        padding=padding, dilation=dilation, bias=bias),
+                nn.PReLU(out_planes)
+            )
+    elif rep == 'RRRB':
+        assert in_planes==out_planes, "RRRB only support c_in = c_out"
+        return RRRB(in_planes, act=True)
 
 def deconv(in_planes, out_planes, kernel_size=4, stride=2, padding=1):
     return nn.Sequential(
@@ -290,7 +294,7 @@ class Stage_Refine_act(nn.Module):
 
 
 class IFBlock_v2(nn.Module):
-    def __init__(self, in_planes, c=64, dw=False, rep= False, act=False):
+    def __init__(self, in_planes, c=64, dw=False, rep= 'none', act=False):
         super(IFBlock_v2, self).__init__()
         self.conv0 = nn.Sequential(
             conv(in_planes, c//2, 3, 2, 1, dw=dw),
@@ -309,14 +313,14 @@ class IFBlock_v2(nn.Module):
             )
         else :
             self.convblock = nn.Sequential(
-                conv(c, c, dw=dw),
-                conv(c, c, dw=dw),
-                conv(c, c, dw=dw),
-                conv(c, c, dw=dw),
-                conv(c, c, dw=dw),
-                conv(c, c, dw=dw),
-                conv(c, c, dw=dw),
-                conv(c, c, dw=dw),
+                conv(c, c, dw=dw, rep=rep),
+                conv(c, c, dw=dw, rep=rep),
+                conv(c, c, dw=dw, rep=rep),
+                conv(c, c, dw=dw, rep=rep),
+                conv(c, c, dw=dw, rep=rep),
+                conv(c, c, dw=dw, rep=rep),
+                conv(c, c, dw=dw, rep=rep),
+                conv(c, c, dw=dw, rep=rep),
             )
         self.lastconv = nn.ConvTranspose2d(c, 6, 4, 2, 1)
 
