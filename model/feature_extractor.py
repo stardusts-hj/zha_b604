@@ -2,6 +2,9 @@ import torch
 import torch.nn as nn
 import math
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
+from model.Repconv import conv
+
+
 
 def window_partition(x, window_size):
     B, H, W, C = x.shape
@@ -280,17 +283,17 @@ class MotionFormerBlock(nn.Module):
 
 
 class ConvBlock(nn.Module):
-    def __init__(self, in_dim, out_dim, depths=2,act_layer=nn.PReLU):
+    def __init__(self, in_dim, out_dim, depths=2,act_layer=nn.PReLU,dw=False,rep='none'):
         super().__init__()
         layers = []
         for i in range(depths):
             if i == 0:
-                layers.append(nn.Conv2d(in_dim, out_dim, 3,1,1))
+                layers.append(conv(in_dim, out_dim, 3,1,1, dw=dw,rep=rep))
             else:
-                layers.append(nn.Conv2d(out_dim, out_dim, 3,1,1))
-            layers.extend([
-                act_layer(out_dim),
-            ])
+                layers.append(conv(out_dim, out_dim, 3,1,1, dw=dw,rep=rep))
+            # layers.extend([
+            #     act_layer(out_dim),
+            # ])
         self.conv = nn.Sequential(*layers)
 
     def _init_weights(self, m):
@@ -393,6 +396,8 @@ class MotionFormer(nn.Module):
                  attn_drop_rate=0., drop_path_rate=0., norm_layer=nn.LayerNorm,
                  depths=[2, 2, 2, 6, 2], window_sizes=[11, 11],**kwarg):
         super().__init__()
+        dw = False
+        rep = kwarg.get('rep', 'none')
         self.depths = depths
         self.num_stages = len(embed_dims)
 
@@ -403,14 +408,14 @@ class MotionFormer(nn.Module):
 
         for i in range(self.num_stages):
             if i == 0:
-                block = ConvBlock(in_chans,embed_dims[i],depths[i])
+                block = ConvBlock(in_chans,embed_dims[i],depths[i],dw=dw,rep=rep)
             else:
                 if i < self.conv_stages:
                     patch_embed = nn.Sequential(
                         nn.Conv2d(embed_dims[i-1], embed_dims[i], 3,2,1),
                         nn.PReLU(embed_dims[i])
                     )
-                    block = ConvBlock(embed_dims[i],embed_dims[i],depths[i])
+                    block = ConvBlock(embed_dims[i],embed_dims[i],depths[i],dw=dw,rep=rep)
                 else:
                     if i == self.conv_stages:
                         patch_embed = CrossScalePatchEmbed(embed_dims[:i],

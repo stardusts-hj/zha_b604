@@ -8,7 +8,8 @@ def conv_bn(in_channels, out_channels, kernel_size, stride=1, padding=0, dilatio
     conv_layer = nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size,
                            stride=stride, padding=padding, dilation=dilation, groups=groups,
                            bias=False, padding_mode=padding_mode)
-    bn_layer = nn.BatchNorm2d(num_features=out_channels, affine=True)
+    # bn_layer = nn.BatchNorm2d(num_features=out_channels, affine=True)
+    bn_layer = nn.Identity()
     se = nn.Sequential()
     se.add_module('conv', conv_layer)
     se.add_module('bn', bn_layer)
@@ -46,18 +47,20 @@ class BNAndPadLayer(nn.Module):
                  affine=True,
                  track_running_stats=True):
         super(BNAndPadLayer, self).__init__()
-        self.bn = nn.BatchNorm2d(num_features, eps, momentum, affine, track_running_stats)
+        # self.bn = nn.BatchNorm2d(num_features, eps, momentum, affine, track_running_stats)
+        self.bn = nn.Identity()
         self.pad_pixels = pad_pixels
 
     def forward(self, input):
         output = self.bn(input)
         if self.pad_pixels > 0:
-            if self.bn.affine:
-                pad_values = self.bn.bias.detach() - self.bn.running_mean * self.bn.weight.detach() / torch.sqrt(self.bn.running_var + self.bn.eps)
-            else:
-                pad_values = - self.bn.running_mean / torch.sqrt(self.bn.running_var + self.bn.eps)
+            # if self.bn.affine:
+            #     pad_values = self.bn.bias.detach() - self.bn.running_mean * self.bn.weight.detach() / torch.sqrt(self.bn.running_var + self.bn.eps)
+            # else:
+            #     pad_values = - self.bn.running_mean / torch.sqrt(self.bn.running_var + self.bn.eps)
             output = F.pad(output, [self.pad_pixels] * 4)
-            pad_values = pad_values.view(1, -1, 1, 1)
+            # pad_values = pad_values.view(1, -1, 1, 1)
+            pad_values = 0
             output[:, :, 0:self.pad_pixels, :] = pad_values
             output[:, :, -self.pad_pixels:, :] = pad_values
             output[:, :, :, 0:self.pad_pixels] = pad_values
@@ -117,14 +120,15 @@ class DiverseBranchBlock(nn.Module):
                 self.dbb_avg.add_module('conv',
                                         nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=1,
                                                   stride=1, padding=0, groups=groups, bias=False))
-                self.dbb_avg.add_module('bn', BNAndPadLayer(pad_pixels=padding, num_features=out_channels))
-                self.dbb_avg.add_module('avg', nn.AvgPool2d(kernel_size=kernel_size, stride=stride, padding=0))
+                # self.dbb_avg.add_module('bn', BNAndPadLayer(pad_pixels=padding, num_features=out_channels))
+                self.dbb_avg.add_module('avg', nn.AvgPool2d(kernel_size=kernel_size, stride=stride, padding=padding))
                 self.dbb_1x1 = conv_bn(in_channels=in_channels, out_channels=out_channels, kernel_size=1, stride=stride,
                                        padding=0, groups=groups)
             else:
                 self.dbb_avg.add_module('avg', nn.AvgPool2d(kernel_size=kernel_size, stride=stride, padding=padding))
 
-            self.dbb_avg.add_module('avgbn', nn.BatchNorm2d(out_channels))
+            # self.dbb_avg.add_module('avgbn', nn.BatchNorm2d(out_channels))
+            self.dbb_avg.add_module('avgbn', nn.Identity())
 
 
             if internal_channels_1x1_3x3 is None:
@@ -136,10 +140,11 @@ class DiverseBranchBlock(nn.Module):
             else:
                 self.dbb_1x1_kxk.add_module('conv1', nn.Conv2d(in_channels=in_channels, out_channels=internal_channels_1x1_3x3,
                                                             kernel_size=1, stride=1, padding=0, groups=groups, bias=False))
-            self.dbb_1x1_kxk.add_module('bn1', BNAndPadLayer(pad_pixels=padding, num_features=internal_channels_1x1_3x3, affine=True))
+            # self.dbb_1x1_kxk.add_module('bn1', BNAndPadLayer(pad_pixels=padding, num_features=internal_channels_1x1_3x3, affine=True))
             self.dbb_1x1_kxk.add_module('conv2', nn.Conv2d(in_channels=internal_channels_1x1_3x3, out_channels=out_channels,
-                                                            kernel_size=kernel_size, stride=stride, padding=0, groups=groups, bias=False))
-            self.dbb_1x1_kxk.add_module('bn2', nn.BatchNorm2d(out_channels))
+                                                            kernel_size=kernel_size, stride=stride, padding=padding, groups=groups, bias=False))
+            # self.dbb_1x1_kxk.add_module('bn2', nn.BatchNorm2d(out_channels))
+            self.dbb_1x1_kxk.add_module('bn2', nn.Identity())
 
         #   The experiments reported in the paper used the default initialization of bn.weight (all as 1). But changing the initialization may be useful in some cases.
         if single_init:

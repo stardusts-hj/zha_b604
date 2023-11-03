@@ -6,7 +6,7 @@ sys.path.append('.')
 from utils.model_summary import get_model_flops
 from model.warplayer import warp
 from model.feature_extractor import MotionFormer
-
+from model.Repconv import conv
 
 
 def deconv(in_planes, out_planes, kernel_size=4, stride=2, padding=1):
@@ -15,20 +15,7 @@ def deconv(in_planes, out_planes, kernel_size=4, stride=2, padding=1):
         nn.PReLU(out_planes)
     )
 
-def conv(in_planes, out_planes, kernel_size=3, stride=1, padding=1, dilation=1, dw = False):
-    if dw:
-        return nn.Sequential(
-        nn.Conv2d(in_planes, in_planes, kernel_size=kernel_size, stride=stride, groups=in_planes,
-                  padding=padding, dilation=dilation, bias=True),
-        nn.Conv2d(in_planes, out_planes, 1, 1),
-        nn.PReLU(out_planes)
-        )
-    else:
-        return nn.Sequential(
-            nn.Conv2d(in_planes, out_planes, kernel_size=kernel_size, stride=stride,
-                    padding=padding, dilation=dilation, bias=True),
-            nn.PReLU(out_planes)
-        )
+
 
 
 ############################ BFAT_backbone ############################
@@ -100,14 +87,14 @@ class BFAT_backbone(nn.Module):
 ############################ EMA-VFI backbone ############################
 
 class Head(nn.Module):
-    def __init__(self, in_planes, scale, c, in_else=17,fc=32, dw=False):
+    def __init__(self, in_planes, scale, c, in_else=17,fc=32, dw=False, rep='none'):
         super(Head, self).__init__()
         self.upsample = nn.Sequential(nn.PixelShuffle(2), nn.PixelShuffle(2))
         self.scale = scale
         self.conv = nn.Sequential(
-                                  conv(in_planes*2 // (4*4) + in_else, c, dw=dw),
-                                  conv(c, c, dw=dw),
-                                  conv(c, 4+fc, dw=dw),
+                                  conv(in_planes*2 // (4*4) + in_else, c, dw=dw, rep=rep),
+                                  conv(c, c, dw=dw, rep=rep),
+                                  conv(c, 4+fc, dw=dw, rep=rep),
                                   )
 
     def forward(self, motion_feature, x, flow): # /16 /8 /4
@@ -133,11 +120,13 @@ class EMA_Backbone(nn.Module):
         super(EMA_Backbone, self).__init__()
         self.flow_num_stage = len(kargs['hidden_dims'])
         self.backbone = MotionFormer(**kargs)
+        rep = kargs.get('rep', 'none')
+        dw = kargs.get('dw', False)
         self.block = nn.ModuleList([Head(kargs['motion_dims'][-1-i] * kargs['depths'][-1-i] + kargs['embed_dims'][-1-i],
                             kargs['scales'][-1-i], 
                             kargs['hidden_dims'][-1-i],
                             6 if i==0 else 3*4+4+kargs['fc'],
-                            kargs['fc'], dw=kargs['dw']) 
+                            kargs['fc'], dw=dw, rep=rep) 
                             for i in range(self.flow_num_stage)])
         
     def forward(self, x):

@@ -21,6 +21,7 @@ def init_backbone_model_config(F=16, W=9, depth=[2, 2, 2, 4, 4]):
         'norm_layer':partial(nn.LayerNorm, eps=1e-6), 
         'fc': 32,
         'dw': True,
+        'rep': 'DBB'
     }
 
 
