@@ -21,8 +21,8 @@ args = parser.parse_args()
 
 '''==========Model setting=========='''
 
-model = Model(-1, 'refine_twice')
-ckpt = 'refine_twice_240.pkl'
+model = Model(-1, 'final_stage0')
+ckpt = 'b32_3090_300.pkl'
 model.load_model(ckpt, -1)
 # model = Model(-1, 'tune')
 # model.load_model('output_tune_fulldata/270.pkl', -1)

@@ -13,7 +13,7 @@ import importlib
 from model.Full_Model import FullModel
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--model", type=str, default="refine_twice")
+parser.add_argument("--model", type=str, default="window_11")
 args = parser.parse_args()
 
 torch.cuda.current_device()
@@ -31,6 +31,10 @@ from benchmark.utils.padder import InputPadder
 padder = InputPadder(I0_.shape, divisor=32)
 I0_, I2_ = padder.pad(I0_, I2_)
 print(I0_.shape)
+
+for m in net.modules():
+    if hasattr(m, 'switch_to_deploy'):
+        m.switch_to_deploy()
 
 with torch.no_grad():
     flops, params = get_model_complexity_info(net, (6, *I0_.shape[2:]), as_strings=True, print_per_layer_stat=False)

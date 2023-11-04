@@ -13,7 +13,7 @@ import torch.nn.functional as F
 
 padder = InputPadder((1080, 1920), divisor=32)
 parser = argparse.ArgumentParser()
-parser.add_argument("--model", type=str, default="final_stage0")
+parser.add_argument("--model", type=str, default="rep_final_stage0")
 parser.add_argument('--test_data_path', type=str, default='test')
 parser.add_argument('--dataset', type=str, default='X4K1000FPS')
 parser.add_argument('--img_ch', type=int, default=3, help='base number of channels for image')
@@ -23,7 +23,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 model = Model(-1, args.model)
-ckpt = 'final_stage1_300.pkl'
+ckpt = 'rep_dbb_32_300.pkl'
+print(ckpt)
 model.load_model(ckpt, -1)
 # model.load_model(f'output_tune_2_stage_refine/20.pkl', -1)
 model.eval()
@@ -74,7 +75,7 @@ def evaluate(model, val_data):
             # i1, i2, gtt, predd, init_pred= process([imgs[j, 0:3], imgs[j,3:6], gt[j], pred[j], extra_info['init_pred'][j]])
             # # overlap = (gtt.astype(np.float32) + predd.astype(np.float32)) / 2.
             # t = float(emb_t[j].detach().cpu())
-            # base_path = os.path.join('validation_refine_twice', f'{i}_{cri:.4f}_{init_cri:.4f}')
+            # base_path = os.path.join(f'validation_{ckpt}', f'{i}_{cri:.4f}_{init_cri:.4f}')
             # if not os.path.exists(base_path):
             #    os.makedirs(base_path)
             # cv.imwrite(os.path.join(base_path, 'left.png'), i1)
@@ -113,7 +114,6 @@ def evaluate(model, val_data):
 
             # warp0 = extra_info['warped_img0'][j:j+1]
             # warp1 = extra_info['warped_img1'][j:j+1]
-            # diff.append([res, cri])
 
             psnr.append(cri)
             init_psnr.append(init_cri)

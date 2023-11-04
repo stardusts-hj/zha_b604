@@ -1,11 +1,13 @@
 import numpy as np
-import matplotlib.pyplot as plt
+import torch
+from model.warplayer import warp_pad_zero
+import cv2 as cv
+flow = torch.ones((1, 2, 400, 400)) * 4
+img = torch.ones((1,3, 400, 400))
 
+warpped = warp_pad_zero(img.cuda(), flow.cuda())
 
-data = np.load('diff_xvfi.npy')
+warpped = warpped.squeeze().cpu().numpy().transpose(1,2,0)
 
-plt.scatter(data[:,0], data[:,1])
-plt.xlabel("mse_loss")
-plt.ylabel("psnr")
-plt.show()
-print(data.shape)
+cv.imshow('1', warpped)
+cv.waitKey(0)

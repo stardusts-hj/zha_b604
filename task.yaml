@@ -1,19 +1,19 @@
-name: train  # <your_task_name>
+name: train_rrrb_act_32
 description: ""
-# workspace和project都需要在网页端提前创建
-workspace: lbh # 建议创建个人命名的workspace
-project: VFI # 本次实验所属project，位于workspace下
+
+workspace: lbh 
+project: VFI 
 resources:
-  resource_pool: rtx2080ti  # 指定资源池
-  slots_per_trial: 4  # gpus
-max_restarts: 1  # 任务失败重试次数
-searcher:  # 不用determined的hyperparameter search的情况下该项固定
+  resource_pool: rtx2080ti 
+  slots_per_trial: 4
+max_restarts: 1
+searcher:
   name: single
   metric: loss
   max_length: 1000
-environment:  # docker 镜像
+environment:
   image: registry.iaticetc.cn:5000/liaobh_vfi:latest
-  registry_auth: # 如果使用私有镜像源需要填写访问所需授权信息
+  registry_auth:
     username: lbh
     password: "1050208869"
-entrypoint: bash run.sh  # 代码运行相关的都放在run.sh里
+entrypoint: bash run.sh
