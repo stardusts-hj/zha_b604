@@ -22,7 +22,7 @@ args = parser.parse_args()
 '''==========Model setting=========='''
 
 model = Model(-1, 'final_stage0')
-ckpt = 'b32_3090_300.pkl'
+ckpt = 'w1_l2_300.pkl'
 model.load_model(ckpt, -1)
 # model = Model(-1, 'tune')
 # model.load_model('output_tune_fulldata/270.pkl', -1)
@@ -31,9 +31,10 @@ model.device()
 
 
 print(f'=========================Start Generating=========================')
-
-I0 = cv2.imread(r'F:\vfi\00001_6x\0000000.png')
-I2 = cv2.imread(r'F:\vfi\00001_6x\0000001.png')
+I0 = cv2.imread(r'final_sample\00000_6x\0000016.png')
+I2 = cv2.imread(r'final_sample\00000_6x\0000017.png')
+# I0 = cv2.imread(r'F:\vfi\00001_6x\0000000.png')
+# I2 = cv2.imread(r'F:\vfi\00001_6x\0000001.png')
 # I0 = cv2.imread(r'F:\code_base\zha_b604\test\Type1\TEST02_045_f0465\0000.png')
 # I2 = cv2.imread(r'F:\code_base\zha_b604\test\Type1\TEST02_045_f0465\0032.png')
 # I0 = cv2.resize(I0, (960, 540))

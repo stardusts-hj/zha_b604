@@ -13,7 +13,7 @@ import importlib
 from model.Full_Model import FullModel
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--model", type=str, default="window_11")
+parser.add_argument("--model", type=str, default="no_rep")
 args = parser.parse_args()
 
 torch.cuda.current_device()

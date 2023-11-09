@@ -13,7 +13,7 @@ import torch.nn.functional as F
 
 padder = InputPadder((1080, 1920), divisor=32)
 parser = argparse.ArgumentParser()
-parser.add_argument("--model", type=str, default="rep_final_stage0")
+parser.add_argument("--model", type=str, default="final_stage0")
 parser.add_argument('--test_data_path', type=str, default='test')
 parser.add_argument('--dataset', type=str, default='X4K1000FPS')
 parser.add_argument('--img_ch', type=int, default=3, help='base number of channels for image')
@@ -23,7 +23,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 model = Model(-1, args.model)
-ckpt = 'rep_dbb_32_300.pkl'
+ckpt = 'b32_3090_300.pkl'
 print(ckpt)
 model.load_model(ckpt, -1)
 # model.load_model(f'output_tune_2_stage_refine/20.pkl', -1)

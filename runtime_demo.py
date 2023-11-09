@@ -18,7 +18,7 @@ parser.add_argument("--model-name", type=str, default="final_stage0")
 parser.add_argument("--save-dir", type=str, default="log")
 
 # specify test case
-parser.add_argument("--repeat", type=int, default=20)
+parser.add_argument("--repeat", type=int, default=40)
 parser.add_argument("--batch-size", type=int, default=1)
 parser.add_argument("--model", type=str, default="reproduce")
 
@@ -61,7 +61,9 @@ from benchmark.utils.padder import InputPadder
 model = Model(-1, args.model)
 model.eval()
 model.device()
-
+for m in model.net.modules():
+    if hasattr(m, 'switch_to_deploy'):
+        m.switch_to_deploy()
 pipeline = model.net.multi_inference
 
 network = model.net

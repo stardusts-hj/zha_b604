@@ -2,12 +2,22 @@ import numpy as np
 import torch
 from model.warplayer import warp_pad_zero
 import cv2 as cv
-flow = torch.ones((1, 2, 400, 400)) * 4
-img = torch.ones((1,3, 400, 400))
+import os
+import math
+gt_path = r'final_sample\00000_2x'
+# im_path = r'final_sample_w1_l2_300.pkl\00000_3x'
+im_path = r'final_sample_b32_3090_300.pkl\00000_3x'
 
-warpped = warp_pad_zero(img.cuda(), flow.cuda())
 
-warpped = warpped.squeeze().cpu().numpy().transpose(1,2,0)
+gt_files = os.listdir(gt_path)
+im_files = os.listdir(im_path)
 
-cv.imshow('1', warpped)
-cv.waitKey(0)
+psnr = []
+for i, im in enumerate(im_files):
+    gt = cv.imread(os.path.join(gt_path, im)).astype(np.float32) / 255.
+    pred = cv.imread(os.path.join(im_path, im)).astype(np.float32) / 255.
+    if i % 3 != 0:
+        psnr.append(-10 * math.log10(((gt - pred) * (gt - pred)).mean()))
+
+psnr = np.array(psnr).mean()
+print(psnr)
